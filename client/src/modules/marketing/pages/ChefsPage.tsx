@@ -38,7 +38,7 @@ export default function ChefsPage() {
                     total: merchants?.length || 0,
                     published: merchants?.filter(m => m.status === true).length || 0,
                     unpublished: merchants?.filter(m => m.status === false || !m.status).length || 0,
-                    online: merchants?.filter(m => m.status === true && m.is_accepting_orders === true).length || 0
+                    online: merchants?.filter(m => m.status === true && m.is_accepting_orders === true && m.is_open === true).length || 0
                 }
             });
             setLastSync(new Date());

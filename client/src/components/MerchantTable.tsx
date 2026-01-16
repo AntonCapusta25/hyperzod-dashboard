@@ -18,7 +18,7 @@ export function MerchantTable({ merchants, loading, onRefresh }: MerchantTablePr
     const handleToggleOnline = async (merchant: Merchant) => {
         setTogglingMerchant(merchant.id);
         try {
-            const newStatus = !merchant.isOnline;
+            const newStatus = !(merchant.status && merchant.is_accepting_orders && merchant.is_open);
             const response = await fetch('http://localhost:3001/api/merchant-overrides', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -52,10 +52,13 @@ export function MerchantTable({ merchants, loading, onRefresh }: MerchantTablePr
         return merchants.filter((merchant) => {
             const matchesSearch = merchant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 merchant.city.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesStatus = statusFilter === 'all' || merchant.status === statusFilter;
+            const matchesStatus = statusFilter === 'all' ||
+                (statusFilter === 'published' && merchant.status === true) ||
+                (statusFilter === 'unpublished' && merchant.status === false);
+            const isOnline = merchant.status === true && merchant.is_accepting_orders === true && merchant.is_open === true;
             const matchesOnline = onlineFilter === 'all' ||
-                (onlineFilter === 'online' && merchant.isOnline) ||
-                (onlineFilter === 'offline' && !merchant.isOnline);
+                (onlineFilter === 'online' && isOnline) ||
+                (onlineFilter === 'offline' && !isOnline);
             const matchesCity = cityFilter === 'all' || merchant.city === cityFilter;
             return matchesSearch && matchesStatus && matchesOnline && matchesCity;
         });
@@ -163,26 +166,27 @@ export function MerchantTable({ merchants, loading, onRefresh }: MerchantTablePr
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span
-                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${merchant.status === 'published'
+                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${merchant.status === true
                                                 ? 'bg-green-100 text-green-800'
                                                 : 'bg-orange-100 text-orange-800'
                                                 }`}
                                         >
-                                            {merchant.status}
+                                            {merchant.status === true ? 'Published' : 'Unpublished'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div>
                                             <select
-                                                value={merchant.isOnline ? 'online' : 'offline'}
+                                                value={(merchant.status && merchant.is_accepting_orders && merchant.is_open) ? 'online' : 'offline'}
                                                 onChange={(e) => {
                                                     const newStatus = e.target.value === 'online';
-                                                    if (newStatus !== merchant.isOnline) {
+                                                    const currentStatus = merchant.status && merchant.is_accepting_orders && merchant.is_open;
+                                                    if (newStatus !== currentStatus) {
                                                         handleToggleOnline(merchant);
                                                     }
                                                 }}
                                                 disabled={togglingMerchant === merchant.id}
-                                                className={`text-sm rounded-md px-2 py-1 border font-medium ${merchant.isOnline
+                                                className={`text-sm rounded-md px-2 py-1 border font-medium ${(merchant.status && merchant.is_accepting_orders && merchant.is_open)
                                                     ? 'border-green-300 bg-green-50 text-green-700'
                                                     : 'border-gray-300 bg-gray-50 text-gray-600'
                                                     } ${(merchant as any).isOverridden ? 'ring-2 ring-blue-400' : ''} disabled:opacity-50 cursor-pointer`}

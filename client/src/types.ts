@@ -8,8 +8,9 @@ export interface MerchantStats {
 export interface Merchant {
     id: string;
     name: string;
-    status: 'published' | 'unpublished';
-    isOnline: boolean;
+    status: boolean;  // true = published, false = unpublished
+    is_accepting_orders: boolean;
+    is_open: boolean;  // Online = is_accepting_orders === true AND is_open === true
     city: string;
     address: string;
     phone: string;
