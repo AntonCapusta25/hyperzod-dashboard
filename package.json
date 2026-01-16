@@ -1,0 +1,17 @@
+{
+    "name": "hyperzod-dashboard",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "sync:customers": "node scripts/sync-customers.js",
+        "sync:customers:dry-run": "node scripts/sync-customers.js --dry-run",
+        "sync:customers:test": "node scripts/sync-customers.js --limit=100",
+        "sync:orders": "node scripts/sync-orders.js",
+        "sync:orders:dry-run": "node scripts/sync-orders.js --dry-run",
+        "sync:orders:test": "node scripts/sync-orders.js --limit=100"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.47.0",
+        "dotenv": "^16.4.5"
+    }
+}

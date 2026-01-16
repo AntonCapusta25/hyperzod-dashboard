@@ -5,13 +5,42 @@ import { Search, MapPin, Phone, Star } from 'lucide-react';
 interface MerchantTableProps {
     merchants: Merchant[];
     loading: boolean;
+    onRefresh?: () => void;
 }
 
-export function MerchantTable({ merchants, loading }: MerchantTableProps) {
+export function MerchantTable({ merchants, loading, onRefresh }: MerchantTableProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'unpublished'>('all');
     const [onlineFilter, setOnlineFilter] = useState<'all' | 'online' | 'offline'>('all');
     const [cityFilter, setCityFilter] = useState<string>('all');
+    const [togglingMerchant, setTogglingMerchant] = useState<string | null>(null);
+
+    const handleToggleOnline = async (merchant: Merchant) => {
+        setTogglingMerchant(merchant.id);
+        try {
+            const newStatus = !merchant.isOnline;
+            const response = await fetch('http://localhost:3001/api/merchant-overrides', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    merchantId: merchant.id,
+                    merchantName: merchant.name,
+                    overrideOnlineStatus: newStatus,
+                    overrideReason: `Manually set to ${newStatus ? 'online' : 'offline'} via dashboard`
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to toggle status');
+
+            // Refresh the data
+            if (onRefresh) onRefresh();
+        } catch (error) {
+            console.error('Error toggling merchant status:', error);
+            alert('Failed to toggle status');
+        } finally {
+            setTogglingMerchant(null);
+        }
+    };
 
     // Get unique cities
     const cities = useMemo(() => {
@@ -143,14 +172,27 @@ export function MerchantTable({ merchants, loading }: MerchantTableProps) {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                            <div
-                                                className={`w-2 h-2 rounded-full mr-2 ${merchant.isOnline ? 'bg-green-500' : 'bg-gray-300'
-                                                    }`}
-                                            ></div>
-                                            <span className="text-sm text-gray-600">
-                                                {merchant.isOnline ? 'Online' : 'Offline'}
-                                            </span>
+                                        <div>
+                                            <select
+                                                value={merchant.isOnline ? 'online' : 'offline'}
+                                                onChange={(e) => {
+                                                    const newStatus = e.target.value === 'online';
+                                                    if (newStatus !== merchant.isOnline) {
+                                                        handleToggleOnline(merchant);
+                                                    }
+                                                }}
+                                                disabled={togglingMerchant === merchant.id}
+                                                className={`text-sm rounded-md px-2 py-1 border font-medium ${merchant.isOnline
+                                                    ? 'border-green-300 bg-green-50 text-green-700'
+                                                    : 'border-gray-300 bg-gray-50 text-gray-600'
+                                                    } ${(merchant as any).isOverridden ? 'ring-2 ring-blue-400' : ''} disabled:opacity-50 cursor-pointer`}
+                                            >
+                                                <option value="online">🟢 Online</option>
+                                                <option value="offline">⚫ Offline</option>
+                                            </select>
+                                            {(merchant as any).isOverridden && (
+                                                <div className="text-xs text-blue-600 mt-0.5">Override</div>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
