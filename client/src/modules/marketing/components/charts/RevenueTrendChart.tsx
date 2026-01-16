@@ -23,12 +23,14 @@ export default function RevenueTrendChart({ data, loading }: RevenueTrendChartPr
         );
     }
 
-    // Calculate cumulative revenue
+    // Calculate cumulative revenue with safety checks
     const cumulativeData = data.reduce((acc, curr, index) => {
         const prevRevenue = index > 0 ? acc[index - 1].cumulative_revenue : 0;
+        const currentRevenue = curr.revenue || 0; // Safety check for undefined
         acc.push({
             ...curr,
-            cumulative_revenue: prevRevenue + curr.revenue,
+            revenue: currentRevenue, // Ensure revenue is never undefined
+            cumulative_revenue: prevRevenue + currentRevenue,
         });
         return acc;
     }, [] as (TimeSeriesData & { cumulative_revenue: number })[]);

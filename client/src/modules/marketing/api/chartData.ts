@@ -82,9 +82,10 @@ export async function getTimeSeriesData(
         const dayData = dataByDate.get(date)!;
         dayData.orders++;
 
-        if (order.order_status === 5) {
+        // Count completed orders (statuses 1-5: Confirmed through Delivered)
+        if (order.order_status >= 1 && order.order_status <= 5) {
             dayData.completed_orders++;
-            dayData.revenue += Number(order.order_amount);
+            dayData.revenue += Number(order.order_amount || 0);
         }
     });
 
