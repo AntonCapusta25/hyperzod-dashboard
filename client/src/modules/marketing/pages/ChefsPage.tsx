@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { StatsCards } from '../../../components/StatsCards';
 import { MerchantTable } from '../../../components/MerchantTable';
 import { MapView } from '../../../components/MapView';
-import { fetchMerchants } from '../../../api';
+import { supabase } from '../../../lib/supabase';
 import type { MerchantsResponse } from '../../../types';
 import { RefreshCw } from 'lucide-react';
 
@@ -22,8 +22,25 @@ export default function ChefsPage() {
         try {
             setLoading(true);
             setError(null);
-            const response = await fetchMerchants();
-            setData(response);
+
+            // Fetch merchants from Supabase
+            const { data: merchants, error: fetchError } = await supabase
+                .from('merchants')
+                .select('*')
+                .order('name', { ascending: true });
+
+            if (fetchError) throw fetchError;
+
+            setData({
+                success: true,
+                merchants: merchants || [],
+                stats: {
+                    total: merchants?.length || 0,
+                    published: merchants?.filter(m => m.status).length || 0,
+                    unpublished: merchants?.filter(m => !m.status).length || 0,
+                    online: merchants?.filter(m => m.is_accepting_orders).length || 0
+                }
+            });
             setLastSync(new Date());
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load data');
