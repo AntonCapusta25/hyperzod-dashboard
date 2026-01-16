@@ -45,7 +45,7 @@ hyperzod-dashboard/
 4. Add your Hyperzod credentials to `.env`:
    ```
    HYPERZOD_API_KEY=your_api_key_here
-   HYPERZOD_TENANT_ID=3331
+   HYPERZOD_TENANT_ID=
    HYPERZOD_BASE_URL=https://api.hyperzod.app
    PORT=3001
    ```
