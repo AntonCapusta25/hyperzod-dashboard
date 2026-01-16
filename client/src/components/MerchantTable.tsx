@@ -207,7 +207,7 @@ export function MerchantTable({ merchants, loading, onRefresh }: MerchantTablePr
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex items-center text-sm text-gray-600">
                                             <Star className="w-4 h-4 mr-1 text-yellow-400 fill-yellow-400" />
-                                            {merchant.rating.toFixed(1)}
+                                            {merchant.rating ? merchant.rating.toFixed(1) : 'N/A'}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
