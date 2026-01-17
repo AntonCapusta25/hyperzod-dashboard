@@ -2,6 +2,7 @@ import { supabase } from '../../../lib/supabase';
 import type { WeeklyAnalytics, AnalyticsFilters, AnalyticsConfig } from '../../../types/analytics';
 import { getActivationRate } from './activationRate';
 import { getRepeatRate } from './repeatRate';
+import { calculateNewCustomers } from './newCustomersHelper';
 
 export async function previewSegmentCount(_rules: any): Promise<number> {
     // Placeholder for the function body, as it was not provided in the instruction.
@@ -53,7 +54,7 @@ async function getWeeklyAnalyticsFallback(
     // Get all orders for the time period first
     const { data: allOrders } = await supabase
         .from('orders')
-        .select('order_id, user_id, order_status, order_amount, delivery_address_id')
+        .select('order_id, user_id, order_status, order_amount, delivery_address_id, merchant_id')
         .gte('created_timestamp', weekStartTimestamp)
         .lte('created_timestamp', weekEndTimestamp);
 
@@ -92,8 +93,27 @@ async function getWeeklyAnalyticsFallback(
     const ordersList = orders;
     // Include Confirmed(1), Preparing(2), Ready(3), Out for delivery(4), Delivered(5)
     const completedOrders = ordersList.filter(o => o.order_status >= 1 && o.order_status <= 5);
-    const uniqueCustomers = new Set(ordersList.map(o => o.user_id).filter(id => id)).size;
-    const totalRevenue = completedOrders.reduce((sum, o) => sum + Number(o.order_amount), 0);
+
+    // Get unique customer IDs from this period
+    const customerIds = [...new Set(ordersList.map(o => o.user_id).filter(id => id))];
+
+    // Calculate new customers (first-time buyers)
+    const uniqueCustomers = await calculateNewCustomers(customerIds, weekStartTimestamp, weekEndTimestamp);
+
+    const ordersRevenue = completedOrders.reduce((sum, o) => sum + Number(o.order_amount), 0);
+
+    // Get manual revenue
+    const weekStartDate = new Date(weekStartTimestamp * 1000).toISOString().split('T')[0];
+    const weekEndDate = new Date(weekEndTimestamp * 1000).toISOString().split('T')[0];
+
+    const { data: manualRevenue } = await supabase
+        .from('manual_revenue_entries')
+        .select('amount')
+        .gte('entry_date', weekStartDate)
+        .lte('entry_date', weekEndDate);
+
+    const manualRevenueTotal = manualRevenue?.reduce((sum, entry) => sum + Number(entry.amount || 0), 0) || 0;
+    const totalRevenue = ordersRevenue + manualRevenueTotal;
 
     // Calculate Amsterdam count
     let amsterdamCount = 0;
@@ -120,22 +140,22 @@ async function getWeeklyAnalyticsFallback(
         amsterdamCount = completedOrders.filter(o => amsterdamAddressIds.has(o.delivery_address_id)).length;
     }
 
-    // Get active chefs count from merchants table
-    let merchantsQuery = supabase
+    // Get active chefs count from actual orders
+    const uniqueMerchantIds = [...new Set(completedOrders.map(o => o.merchant_id).filter(Boolean))];
+
+    // Let's use the safer query that matches TopChefs logic: query against merchant_id
+
+    const { data: merchantDetailsSafe } = await supabase
         .from('merchants')
         .select('id, city')
-        .eq('status', true)
-        .eq('is_accepting_orders', true);
+        .in('merchant_id', uniqueMerchantIds);
 
-    // Filter by city if provided
+    let activeChefs = merchantDetailsSafe?.length || 0;
     if (city) {
-        merchantsQuery = merchantsQuery.ilike('city', `%${city}%`);
+        activeChefs = merchantDetailsSafe?.filter(m => m.city?.toLowerCase().includes(city.toLowerCase())).length || 0;
     }
 
-    const { data: activeMerchants } = await merchantsQuery;
-
-    const activeChefs = activeMerchants?.length || 0;
-    const activeChefsAmsterdam = activeMerchants?.filter(
+    const activeChefsAmsterdam = merchantDetailsSafe?.filter(
         m => m.city?.toLowerCase().includes('amsterdam')
     ).length || 0;
 

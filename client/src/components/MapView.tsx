@@ -49,7 +49,7 @@ const cityCoordinates: { [key: string]: { lat: number; lng: number } } = {
 export function MapView({ merchants, loading }: MapViewProps) {
     // Filter only published merchants
     const publishedMerchants = useMemo(() =>
-        merchants.filter(m => m.status === 'published'),
+        merchants.filter(m => m.status === true),
         [merchants]
     );
 
@@ -88,7 +88,7 @@ export function MapView({ merchants, loading }: MapViewProps) {
             };
 
             existing.total++;
-            if (merchant.isOnline) existing.online++;
+            if (merchant.is_accepting_orders && merchant.is_open) existing.online++;
             existing.published++;
 
             stats.set(matchedCity, existing);

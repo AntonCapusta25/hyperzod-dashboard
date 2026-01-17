@@ -16,7 +16,6 @@ import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import { Download, FileText } from 'lucide-react';
 import ManualRevenueManager from '../components/ManualRevenueManager';
-import SyncOrdersButton from '../../../components/SyncOrdersButton';
 import TopChefsWidget from '../components/TopChefsWidget';
 
 type CityTab = 'all' | 'amsterdam' | 'enschede' | 'utrecht';

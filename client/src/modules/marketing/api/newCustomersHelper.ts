@@ -6,8 +6,7 @@ import { supabase } from '../../../lib/supabase';
 async function calculateNewCustomers(
     customerIds: string[],
     weekStartTimestamp: number,
-    weekEndTimestamp: number,
-    city?: string
+    weekEndTimestamp: number
 ): Promise<number> {
     let newCustomersCount = 0;
 
