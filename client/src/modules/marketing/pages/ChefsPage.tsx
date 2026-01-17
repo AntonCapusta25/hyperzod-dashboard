@@ -38,7 +38,7 @@ export default function ChefsPage() {
                     total: merchants?.length || 0,
                     published: merchants?.filter(m => m.status === true).length || 0,
                     unpublished: merchants?.filter(m => m.status === false || !m.status).length || 0,
-                    online: merchants?.filter(m => m.status === true && m.is_accepting_orders === true && m.is_open === true).length || 0
+                    online: merchants?.filter(m => m.status === true && m.is_accepting_orders && m.is_open).length || 0
                 }
             });
             setLastSync(new Date());
@@ -68,14 +68,69 @@ export default function ChefsPage() {
                         )}
                     </p>
                 </div>
-                <button
-                    onClick={loadData}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    {loading ? 'Syncing...' : 'Sync Now'}
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={async () => {
+                            try {
+                                setLoading(true);
+                                setError(null);
+
+                                console.log('🚀 Calling sync function...');
+
+                                // Use custom fetch with longer timeout (30s) instead of Supabase client
+                                const controller = new AbortController();
+                                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+                                const response = await fetch(
+                                    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-merchants`,
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                                            'Content-Type': 'application/json',
+                                        },
+                                        signal: controller.signal,
+                                    }
+                                );
+
+                                clearTimeout(timeoutId);
+
+                                if (!response.ok) {
+                                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                }
+
+                                const data = await response.json();
+
+                                if (!data?.success) throw new Error(data?.error || 'Sync failed');
+
+                                console.log(`✅ Synced ${data.count} merchants (${data.online} online)`);
+
+                                // Reload data after sync
+                                await loadData();
+                            } catch (err) {
+                                console.error('Sync error:', err);
+                                if (err.name === 'AbortError') {
+                                    setError('Sync timed out after 30 seconds. Please try again.');
+                                } else {
+                                    setError(err instanceof Error ? err.message : 'Failed to sync merchants from Hyperzod');
+                                }
+                            }
+                        }}
+                        disabled={loading}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        {loading ? 'Syncing from Hyperzod...' : 'Sync from Hyperzod'}
+                    </button>
+                    <button
+                        onClick={loadData}
+                        disabled={loading}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        {loading ? 'Refreshing...' : 'Refresh View'}
+                    </button>
+                </div>
             </div>
 
             {/* Sub-tabs */}

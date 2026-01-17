@@ -104,6 +104,37 @@ app.post('/api/sync-orders', async (req, res) => {
     }
 });
 
+// Sync merchants endpoint
+app.post('/api/sync-merchants', async (req, res) => {
+    try {
+        console.log('🚀 Starting merchant sync...');
+
+        // Run the sync script (go up one directory since server runs from /server)
+        const { stdout, stderr } = await execAsync('node ../scripts/sync-merchants.js', {
+            cwd: process.cwd(),
+            env: { ...process.env }
+        });
+
+        console.log('Sync output:', stdout);
+        if (stderr) console.error('Sync errors:', stderr);
+
+        res.json({
+            success: true,
+            message: 'Merchant sync completed successfully',
+            output: stdout
+        });
+    } catch (error) {
+        console.error('❌ Error syncing merchants:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            output: error.stdout,
+            stderr: error.stderr
+        });
+    }
+});
+
+
 // Merchant overrides endpoint
 app.post('/api/merchant-overrides', async (req, res) => {
     try {

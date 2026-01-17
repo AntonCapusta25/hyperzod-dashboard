@@ -35,6 +35,65 @@ export async function getWeeklyAnalytics(
     const weekStartTimestamp = Math.floor(weekStart.getTime() / 1000);
     const weekEndTimestamp = Math.floor(weekEnd.getTime() / 1000);
 
+    // Try optimized RPC first
+    try {
+        console.log('[Analytics] Attempting optimized RPC fetch...');
+        const { data, error } = await supabase.rpc('get_weekly_analytics_v2', {
+            start_ts: weekStartTimestamp,
+            end_ts: weekEndTimestamp,
+            city_filter: filters?.city || null
+        });
+
+        if (error) throw error;
+
+        if (data) {
+            console.log('[Analytics] Optimized RPC success:', data);
+
+            // Calculate ratios locally leveraging the fast data
+            // We still need to call ratio helpers until they are moved to RPC
+            let activationRate = 0;
+            let repeatRate = 0;
+
+            if (data.completed_orders > 0) {
+                try {
+                    const [activationData, repeatData] = await Promise.all([
+                        getActivationRate(weekStart, weekEnd),
+                        getRepeatRate(weekStart, weekEnd)
+                    ]);
+                    activationRate = activationData.activationRate;
+                    repeatRate = repeatData.repeatRate;
+                } catch (err) {
+                    console.error('Error fetching rates:', err);
+                }
+            }
+
+            // Calculate calculated fields
+            const totalRevenue = Number(data.total_revenue || 0);
+            const contributionMarginPerOrder = data.completed_orders > 0
+                ? (totalRevenue * 0.12) / data.completed_orders
+                : undefined;
+
+            const cacPerCustomer = config?.weekly_marketing_spend && data.new_customers > 0
+                ? config.weekly_marketing_spend / data.new_customers
+                : undefined;
+
+            return {
+                new_customers: data.new_customers,
+                activation_rate: activationRate,
+                completed_orders: data.completed_orders,
+                completed_orders_amsterdam: data.completed_orders_amsterdam,
+                repeat_rate_30d: repeatRate,
+                active_chefs: data.active_chefs,
+                active_chefs_amsterdam: data.active_chefs_amsterdam,
+                cac_per_customer: cacPerCustomer,
+                contribution_margin_per_order: contributionMarginPerOrder
+            };
+        }
+    } catch (err) {
+        console.warn('[Analytics] Optimized RPC failed or not found, using fallback:', err);
+        // Continue to fallback
+    }
+
     // Use fallback function for accurate metrics (RPC doesn't have updated logic)
     return await getWeeklyAnalyticsFallback(weekStartTimestamp, weekEndTimestamp, config, filters?.city);
 }

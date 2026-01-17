@@ -35,11 +35,45 @@ export default function ClientsPage() {
     return (
         <div className="p-8">
             {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
-                <p className="text-gray-600 mt-2">
-                    Manage your customer database and email preferences
-                </p>
+            <div className="mb-8 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
+                    <p className="text-gray-600 mt-2">
+                        Manage your customer database and email preferences
+                    </p>
+                </div>
+                <button
+                    onClick={async () => {
+                        try {
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 30000);
+                            const response = await fetch(
+                                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-clients`,
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                                        'Content-Type': 'application/json',
+                                    },
+                                    signal: controller.signal,
+                                }
+                            );
+                            clearTimeout(timeoutId);
+                            const data = await response.json();
+                            if (data.success) {
+                                alert(`✅ Synced ${data.count} clients`);
+                                window.location.reload();
+                            } else {
+                                alert(`❌ Sync failed: ${data.error}`);
+                            }
+                        } catch (err) {
+                            alert(`❌ Error: ${err instanceof Error ? err.message : 'Sync failed'}`);
+                        }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                    🔄 Sync from Hyperzod
+                </button>
             </div>
 
             {/* Search and Filters */}
