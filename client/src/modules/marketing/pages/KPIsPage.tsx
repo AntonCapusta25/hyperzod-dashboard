@@ -15,6 +15,9 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import { Download, FileText } from 'lucide-react';
+import ManualRevenueManager from '../components/ManualRevenueManager';
+import SyncOrdersButton from '../../../components/SyncOrdersButton';
+import TopChefsWidget from '../components/TopChefsWidget';
 
 type CityTab = 'all' | 'amsterdam' | 'enschede' | 'utrecht';
 
@@ -463,6 +466,15 @@ export default function KPIsPage() {
                                     <OrderStatusChart data={chartData.statusData} loading={chartsLoading} />
                                 </div>
                             </div>
+
+                            {/* Top Performing Chefs */}
+                            <div className="mt-8">
+                                <TopChefsWidget
+                                    startDate={dateRange.from}
+                                    endDate={dateRange.to}
+                                    city={activeCityTab === 'all' ? undefined : activeCityTab.charAt(0).toUpperCase() + activeCityTab.slice(1)}
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -558,6 +570,11 @@ export default function KPIsPage() {
                                             Save Configuration
                                         </button>
                                     </div>
+                                </div>
+
+                                {/* Manual Revenue Manager */}
+                                <div className="mt-8">
+                                    <ManualRevenueManager />
                                 </div>
                             </div>
                         </div>

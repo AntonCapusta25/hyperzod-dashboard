@@ -34,67 +34,10 @@ export async function getWeeklyAnalytics(
     const weekStartTimestamp = Math.floor(weekStart.getTime() / 1000);
     const weekEndTimestamp = Math.floor(weekEnd.getTime() / 1000);
 
-    // SINGLE OPTIMIZED QUERY - Get all stats in one go using RPC
-    const { data, error } = await supabase.rpc('get_weekly_analytics', {
-        start_ts: weekStartTimestamp,
-        end_ts: weekEndTimestamp
-    });
-
-    if (error) {
-        console.error('RPC error:', error);
-        // Fallback to simple query if RPC doesn't exist
-        return await getWeeklyAnalyticsFallback(weekStartTimestamp, weekEndTimestamp, config, filters?.city);
-    }
-
-    const stats = data?.[0] || {
-        total_orders: 0,
-        completed_orders: 0,
-        unique_customers: 0,
-        total_revenue: 0,
-        amsterdam_orders: 0
-    };
-
-    // Calculate derived metrics
-    const cacPerCustomer = config?.weekly_marketing_spend && stats.unique_customers > 0
-        ? config.weekly_marketing_spend / stats.unique_customers
-        : undefined;
-
-    // Calculate contribution margin per order
-    // Platform takes 12% commission on total revenue
-    const contributionMarginPerOrder = stats.completed_orders > 0
-        ? (stats.total_revenue * 0.12) / stats.completed_orders
-        : undefined;
-
-    // Calculate activation rate
-    let activationRate = 0;
-    try {
-        const activationData = await getActivationRate(weekStart, weekEnd);
-        activationRate = activationData.activationRate;
-    } catch (err) {
-        console.error('Error calculating activation rate:', err);
-    }
-
-    // Calculate 30-day repeat rate
-    let repeatRate = 0;
-    try {
-        const repeatData = await getRepeatRate(weekStart, weekEnd);
-        repeatRate = repeatData.repeatRate;
-    } catch (err) {
-        console.error('Error calculating repeat rate:', err);
-    }
-
-    return {
-        new_customers: stats.unique_customers,
-        activation_rate: activationRate,
-        completed_orders: stats.completed_orders,
-        completed_orders_amsterdam: stats.amsterdam_orders || 0,
-        repeat_rate_30d: repeatRate,
-        active_chefs: 0, // Will add separately
-        active_chefs_amsterdam: 0,
-        cac_per_customer: cacPerCustomer,
-        contribution_margin_per_order: contributionMarginPerOrder,
-    };
+    // Use fallback function for accurate metrics (RPC doesn't have updated logic)
+    return await getWeeklyAnalyticsFallback(weekStartTimestamp, weekEndTimestamp, config, filters?.city);
 }
+
 
 /**
  * Fallback method using simple queries
@@ -206,26 +149,30 @@ async function getWeeklyAnalyticsFallback(
         ? (totalRevenue * 0.12) / completedOrders.length
         : undefined;
 
-    // Calculate activation rate
+    // Calculate activation rate (only if there are orders)
     let activationRate = 0;
-    try {
-        const weekStart = new Date(weekStartTimestamp * 1000);
-        const weekEnd = new Date(weekEndTimestamp * 1000);
-        const activationData = await getActivationRate(weekStart, weekEnd);
-        activationRate = activationData.activationRate;
-    } catch (err) {
-        console.error('Error calculating activation rate:', err);
+    if (completedOrders.length > 0) {
+        try {
+            const weekStart = new Date(weekStartTimestamp * 1000);
+            const weekEnd = new Date(weekEndTimestamp * 1000);
+            const activationData = await getActivationRate(weekStart, weekEnd);
+            activationRate = activationData.activationRate;
+        } catch (err) {
+            console.error('Error calculating activation rate:', err);
+        }
     }
 
-    // Calculate 30-day repeat rate
+    // Calculate 30-day repeat rate (only if there are orders)
     let repeatRate = 0;
-    try {
-        const weekStart = new Date(weekStartTimestamp * 1000);
-        const weekEnd = new Date(weekEndTimestamp * 1000);
-        const repeatData = await getRepeatRate(weekStart, weekEnd);
-        repeatRate = repeatData.repeatRate;
-    } catch (err) {
-        console.error('Error calculating repeat rate:', err);
+    if (completedOrders.length > 0) {
+        try {
+            const weekStart = new Date(weekStartTimestamp * 1000);
+            const weekEnd = new Date(weekEndTimestamp * 1000);
+            const repeatData = await getRepeatRate(weekStart, weekEnd);
+            repeatRate = repeatData.repeatRate;
+        } catch (err) {
+            console.error('Error calculating repeat rate:', err);
+        }
     }
 
     return {

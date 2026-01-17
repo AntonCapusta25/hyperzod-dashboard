@@ -42,6 +42,13 @@ export async function getTimeSeriesData(
 
     if (!orders) return [];
 
+    // Get manual revenue entries for the date range
+    const { data: manualRevenue } = await supabase
+        .from('manual_revenue_entries')
+        .select('entry_date, amount')
+        .gte('entry_date', startDate.toISOString().split('T')[0])
+        .lte('entry_date', endDate.toISOString().split('T')[0]);
+
     // If city filter, get matching addresses
     let filteredOrders = orders;
     if (city) {
@@ -89,6 +96,28 @@ export async function getTimeSeriesData(
         }
     });
 
+    // Add manual revenue to the corresponding dates
+    console.log('[ChartData] Manual revenue entries:', manualRevenue?.length || 0);
+    manualRevenue?.forEach(entry => {
+        const date = entry.entry_date;
+        console.log('[ChartData] Adding manual revenue:', date, '€' + entry.amount);
+
+        if (!dataByDate.has(date)) {
+            dataByDate.set(date, {
+                date,
+                orders: 0,
+                completed_orders: 0,
+                revenue: 0,
+                new_customers: 0,
+            });
+        }
+
+        const dayData = dataByDate.get(date)!;
+        const oldRevenue = dayData.revenue;
+        dayData.revenue += Number(entry.amount || 0);
+        console.log('[ChartData] Updated revenue for', date, 'from €' + oldRevenue.toFixed(2), 'to €' + dayData.revenue.toFixed(2));
+    });
+
     // Fill in missing dates with zeros
     const result: TimeSeriesData[] = [];
     const currentDate = new Date(startDate);
@@ -104,6 +133,9 @@ export async function getTimeSeriesData(
         });
         currentDate.setDate(currentDate.getDate() + 1);
     }
+
+    console.log('[ChartData] Total data points:', result.length);
+    console.log('[ChartData] Total revenue:', result.reduce((sum, d) => sum + d.revenue, 0).toFixed(2));
 
     return result;
 }

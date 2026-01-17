@@ -2,6 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 dotenv.config();
 
@@ -48,132 +52,76 @@ app.get('/api/merchants', async (req, res) => {
             });
 
             if (!response.ok) {
-                const text = await response.text();
-                console.error(`❌ Hyperzod API error: ${response.status}`, text.substring(0, 200));
-                throw new Error(`Hyperzod API error: ${response.status}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const responseData = await response.json();
+            const data = await response.json();
 
-            if (responseData.success && responseData.data) {
-                lastPage = responseData.data.last_page || 1;
-                if (Array.isArray(responseData.data.data)) {
-                    allMerchants = allMerchants.concat(responseData.data.data);
-                }
+            if (data.success && data.data && data.data.data) {
+                allMerchants = allMerchants.concat(data.data.data);
+                lastPage = data.data.last_page;
+                currentPage++;
+            } else {
+                break;
             }
-
-            currentPage++;
         } while (currentPage <= lastPage);
 
-        console.log(`✅ Total merchants fetched: ${allMerchants.length}`);
+        console.log(`✅ Successfully fetched ${allMerchants.length} merchants`);
+        res.json({ success: true, data: allMerchants });
+    } catch (error) {
+        console.error('❌ Error fetching merchants:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
-        // Fetch overrides from Supabase
-        const { data: overrides, error: overridesError } = await supabase
-            .from('merchant_overrides')
-            .select('*');
+// Sync orders endpoint
+app.post('/api/sync-orders', async (req, res) => {
+    try {
+        console.log('🚀 Starting order sync...');
 
-        if (overridesError) {
-            console.error('⚠️  Error fetching overrides:', overridesError.message);
-        }
-
-        // Create override map for quick lookup
-        const overrideMap = new Map();
-        if (overrides) {
-            overrides.forEach(override => {
-                overrideMap.set(override.merchant_id, override);
-            });
-            console.log(`📝 Loaded ${overrides.length} merchant overrides`);
-        }
-
-        // Map merchants and apply overrides
-        const mappedMerchants = allMerchants.map(m => {
-            const merchantId = String(m._id || m.merchant_id || m.id);
-            const override = overrideMap.get(merchantId);
-
-            // Calculate base online status from Hyperzod
-            // A merchant is truly "online" if they are published AND accepting orders AND open
-            const hyperzodOnline = (m.status === true || m.status === 1) &&
-                m.is_accepting_orders === true &&
-                m.is_open === true;
-
-            // Apply override if exists
-            const finalOnlineStatus = override?.override_online_status !== undefined
-                ? override.override_online_status
-                : hyperzodOnline;
-
-            return {
-                id: merchantId,
-                name: m.name || m.business_name || 'Unknown',
-                status: m.status === true || m.status === 1 ? 'published' : 'unpublished',
-                isOnline: finalOnlineStatus,
-                isOverridden: override !== undefined,
-                overrideReason: override?.override_reason || null,
-                city: m.city || 'N/A',
-                address: m.address || 'N/A',
-                phone: m.phone || m.owner_phone || 'N/A',
-                category: m.category_name || 'N/A',
-                rating: m.average_rating || 0,
-                createdAt: m.created_at || null,
-            };
+        // Run the sync script
+        const { stdout, stderr } = await execAsync('node scripts/sync-orders.js', {
+            cwd: process.cwd(),
+            env: { ...process.env }
         });
 
-        // Recalculate stats with overrides applied
-        const stats = {
-            total: mappedMerchants.length,
-            published: mappedMerchants.filter(m => m.status === 'published').length,
-            unpublished: mappedMerchants.filter(m => m.status === 'unpublished').length,
-            online: mappedMerchants.filter(m => m.isOnline).length,
-        };
-
-        // Log specific merchant for debugging
-        const rissa = mappedMerchants.find(m => m.name?.toLowerCase().includes('rissa'));
-        if (rissa) {
-            console.log('🔍 Kitchen of Rissa final status:', {
-                name: rissa.name,
-                isOnline: rissa.isOnline,
-                isOverridden: rissa.isOverridden,
-                overrideReason: rissa.overrideReason
-            });
-        }
-
-        // Set no-cache headers on response
-        res.set({
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-        });
+        console.log('Sync output:', stdout);
+        if (stderr) console.error('Sync errors:', stderr);
 
         res.json({
             success: true,
-            stats,
-            fetchedAt: new Date().toISOString(),
-            merchants: mappedMerchants,
+            message: 'Order sync completed successfully',
+            output: stdout
         });
     } catch (error) {
-        console.error('❌ Error fetching merchants:', error);
+        console.error('❌ Error syncing orders:', error);
         res.status(500).json({
             success: false,
-            error: error.message || 'Failed to fetch merchants',
+            error: error.message,
+            output: error.stdout,
+            stderr: error.stderr
         });
     }
 });
 
-// Create or update merchant override
+// Merchant overrides endpoint
 app.post('/api/merchant-overrides', async (req, res) => {
     try {
-        const { merchantId, merchantName, overrideOnlineStatus, overrideReason } = req.body;
+        const { merchantId, status } = req.body;
 
-        if (!merchantId) {
-            return res.status(400).json({ success: false, error: 'merchantId is required' });
+        if (!merchantId || status === undefined) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing merchantId or status'
+            });
         }
 
+        // Upsert the override
         const { data, error } = await supabase
             .from('merchant_overrides')
             .upsert({
                 merchant_id: merchantId,
-                merchant_name: merchantName,
-                override_online_status: overrideOnlineStatus,
-                override_reason: overrideReason,
+                is_accepting_orders: status,
                 updated_at: new Date().toISOString()
             }, {
                 onConflict: 'merchant_id'
@@ -181,12 +129,13 @@ app.post('/api/merchant-overrides', async (req, res) => {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
-        console.log(`✅ Override created/updated for merchant: ${merchantId}`);
         res.json({ success: true, data });
     } catch (error) {
-        console.error('❌ Error creating override:', error);
+        console.error('Error creating override:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -201,29 +150,31 @@ app.delete('/api/merchant-overrides/:merchantId', async (req, res) => {
             .delete()
             .eq('merchant_id', merchantId);
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
-        console.log(`✅ Override deleted for merchant: ${merchantId}`);
         res.json({ success: true });
     } catch (error) {
-        console.error('❌ Error deleting override:', error);
+        console.error('Error deleting override:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Get all overrides
+// Get all merchant overrides
 app.get('/api/merchant-overrides', async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('merchant_overrides')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select('*');
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
         res.json({ success: true, data });
     } catch (error) {
-        console.error('❌ Error fetching overrides:', error);
+        console.error('Error fetching overrides:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
