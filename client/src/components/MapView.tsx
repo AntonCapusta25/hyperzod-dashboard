@@ -58,17 +58,21 @@ export function MapView({ merchants, loading }: MapViewProps) {
         const stats = new Map<string, CityStats>();
 
         publishedMerchants.forEach(merchant => {
-            if (merchant.city === 'N/A') return;
+            const merchantCity = merchant.city || '';
+            const merchantAddress = merchant.address || '';
+
+            if (!merchantCity || merchantCity === 'N/A') return;
 
             // Find matching city in coordinates
-            let matchedCity = merchant.city;
-            let coords = cityCoordinates[merchant.city];
+            let matchedCity = merchantCity;
+            // Use safe access although we checked for truthiness above
+            let coords = cityCoordinates[merchantCity];
 
             if (!coords) {
                 // Try to find a partial match
                 for (const [city, coord] of Object.entries(cityCoordinates)) {
-                    if (merchant.city.toLowerCase().includes(city.toLowerCase()) ||
-                        merchant.address.toLowerCase().includes(city.toLowerCase())) {
+                    if (merchantCity.toLowerCase().includes(city.toLowerCase()) ||
+                        merchantAddress.toLowerCase().includes(city.toLowerCase())) {
                         matchedCity = city;
                         coords = coord;
                         break;
