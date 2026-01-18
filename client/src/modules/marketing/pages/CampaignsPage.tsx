@@ -45,6 +45,12 @@ export default function CampaignsPage() {
             return;
         }
 
+        // Prevent duplicate submissions
+        if (sending) {
+            console.log('Already creating campaign, ignoring duplicate click');
+            return;
+        }
+
         try {
             setSending(true);
             // Create the campaign first

@@ -24,16 +24,15 @@ serve(async (req) => {
         // Create Supabase client with service role
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-        console.log('� Starting efficient merchant sync from Hyperzod...')
+        console.log('🔄 Starting merchant sync from Hyperzod...')
 
-        // Only fetch first 3 pages to keep it fast (usually ~90 merchants)
-        const MAX_PAGES = 3
         let allMerchants = []
         let currentPage = 1
+        let hasMorePages = true
 
-        // Fetch limited pages from Hyperzod
-        while (currentPage <= MAX_PAGES) {
-            console.log(`📡 Fetching page ${currentPage}/${MAX_PAGES}...`)
+        // Fetch all pages from Hyperzod
+        while (hasMorePages) {
+            console.log(`📡 Fetching page ${currentPage}...`)
             const url = `${HYPERZOD_BASE_URL}/admin/v1/merchant/list?page=${currentPage}`
 
             const response = await fetch(url, {
@@ -54,12 +53,14 @@ serve(async (req) => {
 
             if (data.success && data.data && Array.isArray(data.data.data)) {
                 allMerchants = allMerchants.concat(data.data.data)
-                console.log(`   ✓ Got ${data.data.data.length} merchants`)
+                console.log(`   ✓ Got ${data.data.data.length} merchants (Total: ${allMerchants.length})`)
 
-                // Stop if we've reached the last page
+                // Check if we've reached the last page
                 if (currentPage >= (data.data.last_page || 1)) {
-                    break
+                    hasMorePages = false
                 }
+            } else {
+                hasMorePages = false
             }
 
             currentPage++

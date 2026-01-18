@@ -29,6 +29,7 @@ export default function OverviewPage() {
         totalRevenue: 0,
     });
     const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+    const [syncing, setSyncing] = useState(false);
 
     useEffect(() => {
         async function loadData() {
@@ -71,6 +72,74 @@ export default function OverviewPage() {
         }
         loadData();
     }, []);
+
+    async function syncAllData() {
+        if (syncing) return;
+
+        setSyncing(true);
+        try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+            // Trigger all three sync functions in parallel
+            const results = await Promise.allSettled([
+                fetch(`${supabaseUrl}/functions/v1/sync-orders`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${anonKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    signal: AbortSignal.timeout(30000),
+                }),
+                fetch(`${supabaseUrl}/functions/v1/sync-clients`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${anonKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    signal: AbortSignal.timeout(30000),
+                }),
+                fetch(`${supabaseUrl}/functions/v1/sync-merchants`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${anonKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    signal: AbortSignal.timeout(30000),
+                }),
+            ]);
+
+            // Check results
+            const messages = [];
+            if (results[0].status === 'fulfilled') {
+                const data = await results[0].value.json();
+                messages.push(`Orders: ${data.count || 'synced'}`);
+            } else {
+                messages.push('Orders: failed');
+            }
+
+            if (results[1].status === 'fulfilled') {
+                const data = await results[1].value.json();
+                messages.push(`Clients: ${data.count || 'synced'}`);
+            } else {
+                messages.push('Clients: failed');
+            }
+
+            if (results[2].status === 'fulfilled') {
+                const data = await results[2].value.json();
+                messages.push(`Merchants: ${data.count || 'synced'}`);
+            } else {
+                messages.push('Merchants: failed');
+            }
+
+            alert(`✅ Sync completed!\n${messages.join('\n')}`);
+            window.location.reload();
+        } catch (err) {
+            alert(`❌ Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        } finally {
+            setSyncing(false);
+        }
+    }
 
     async function loadRecentActivity() {
         try {
@@ -235,9 +304,27 @@ export default function OverviewPage() {
 
     return (
         <div>
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Dashboard Overview</h1>
-                <p className="text-gray-600 mt-2">Welcome back! Here's what's happening with your business.</p>
+            <div className="mb-8 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">Dashboard Overview</h1>
+                    <p className="text-gray-600 mt-2">Welcome back! Here's what's happening with your business.</p>
+                </div>
+                <button
+                    onClick={syncAllData}
+                    disabled={syncing}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {syncing ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            Syncing...
+                        </>
+                    ) : (
+                        <>
+                            🔄 Sync All Data
+                        </>
+                    )}
+                </button>
             </div>
 
             {/* Summary Cards */}

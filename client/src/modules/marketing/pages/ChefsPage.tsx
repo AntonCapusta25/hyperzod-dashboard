@@ -4,8 +4,17 @@ import { StatsCards } from '../../../components/StatsCards';
 import { MerchantTable } from '../../../components/MerchantTable';
 import { MapView } from '../../../components/MapView';
 import { supabase } from '../../../lib/supabase';
-import type { MerchantsResponse } from '../../../types';
-import { RefreshCw } from 'lucide-react';
+import { type MerchantsResponse } from '../../../types';
+import { RefreshCw, Trophy, Award } from 'lucide-react';
+
+interface TopChef {
+    merchant_id: string;
+    name: string;
+    city: string;
+    total_revenue: number;
+    order_count: number;
+    avg_order_value: number;
+}
 
 export default function ChefsPage() {
     const location = useLocation();
@@ -14,9 +23,12 @@ export default function ChefsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastSync, setLastSync] = useState<Date | null>(null);
+    const [activeTab, setActiveTab] = useState<'list' | 'map' | 'top'>('list');
+    const [topChefs, setTopChefs] = useState<TopChef[]>([]);
+    const [loadingTop, setLoadingTop] = useState(false);
 
-    // Determine active tab from URL
-    const activeSubTab = location.pathname.includes('/map') ? 'map' : 'list';
+    // Determine active tab from URL or state
+    const activeSubTab = location.pathname.includes('/map') ? 'map' : activeTab;
 
     const loadData = async () => {
         try {
@@ -50,9 +62,30 @@ export default function ChefsPage() {
         }
     };
 
+    async function loadTopChefs() {
+        setLoadingTop(true);
+        try {
+            const { data: topPerformers, error } = await supabase
+                .rpc('get_top_performing_chefs', { limit_count: 10 });
+
+            if (error) throw error;
+            setTopChefs(topPerformers || []);
+        } catch (err) {
+            console.error('Error loading top chefs:', err);
+        } finally {
+            setLoadingTop(false);
+        }
+    }
+
     useEffect(() => {
         loadData();
     }, []);
+
+    useEffect(() => {
+        if (activeTab === 'top') {
+            loadTopChefs();
+        }
+    }, [activeTab]);
 
     return (
         <div>
@@ -137,7 +170,10 @@ export default function ChefsPage() {
             <div className="mb-6 border-b border-gray-200">
                 <nav className="-mb-px flex space-x-8">
                     <button
-                        onClick={() => navigate('/dashboard/chefs/list')}
+                        onClick={() => {
+                            setActiveTab('list');
+                            navigate('/dashboard/chefs/list');
+                        }}
                         className={`${activeSubTab === 'list'
                             ? 'border-blue-500 text-blue-600'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -146,13 +182,26 @@ export default function ChefsPage() {
                         Chef List
                     </button>
                     <button
-                        onClick={() => navigate('/dashboard/chefs/map')}
+                        onClick={() => {
+                            setActiveTab('map');
+                            navigate('/dashboard/chefs/map');
+                        }}
                         className={`${activeSubTab === 'map'
                             ? 'border-blue-500 text-blue-600'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                     >
                         Map View
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('top')}
+                        className={`${activeTab === 'top'
+                            ? 'border-yellow-500 text-yellow-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                    >
+                        <Trophy className="w-4 h-4" />
+                        Top Performers
                     </button>
                 </nav>
             </div>
@@ -189,6 +238,90 @@ export default function ChefsPage() {
                                 merchants={data?.merchants || []}
                                 loading={loading}
                             />
+                        )}
+                        {activeTab === 'top' && (
+                            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg shadow-sm border-2 border-yellow-200 overflow-hidden">
+                                <div className="p-6 bg-gradient-to-r from-yellow-400 to-orange-400">
+                                    <div className="flex items-center gap-3">
+                                        <Trophy className="w-8 h-8 text-white" />
+                                        <div>
+                                            <h2 className="text-2xl font-bold text-white">Top Performers</h2>
+                                            <p className="text-yellow-100">Top 10 chefs by revenue and orders</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {loadingTop ? (
+                                    <div className="p-8 text-center text-gray-500">Loading top performers...</div>
+                                ) : topChefs.length === 0 ? (
+                                    <div className="p-8 text-center text-gray-500">No top performers found</div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className="bg-yellow-100 border-b border-yellow-200">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                                                        Rank
+                                                    </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                                                        Chef Name
+                                                    </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                                                        City
+                                                    </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                                                        Total Revenue
+                                                    </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                                                        Orders
+                                                    </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                                                        Avg Order Value
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-yellow-100">
+                                                {topChefs.map((chef, index) => (
+                                                    <tr key={chef.merchant_id} className="hover:bg-yellow-50">
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="flex items-center">
+                                                                {index < 3 && (
+                                                                    <Award className={`w-5 h-5 mr-2 ${index === 0 ? 'text-yellow-500' :
+                                                                        index === 1 ? 'text-gray-400' :
+                                                                            'text-orange-600'
+                                                                        }`} />
+                                                                )}
+                                                                <span className="text-sm font-bold text-gray-900">#{index + 1}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-sm font-medium text-gray-900">{chef.name}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-sm text-gray-900">{chef.city}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-sm font-bold text-green-600">
+                                                                €{chef.total_revenue.toFixed(2)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                                                {chef.order_count} orders
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-sm text-gray-900">
+                                                                €{chef.avg_order_value.toFixed(2)}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </>
                 )
