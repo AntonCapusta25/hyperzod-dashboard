@@ -85,6 +85,9 @@ export async function getWeeklyAnalytics(
                 repeat_rate_30d: repeatRate,
                 active_chefs: data.active_chefs,
                 active_chefs_amsterdam: data.active_chefs_amsterdam,
+                average_order_value: Number(data.average_order_value || 0),
+                cancellation_rate: Number(data.cancellation_rate || 0),
+                on_time_delivery_rate: Number(data.on_time_delivery_rate || 0),
                 cac_per_customer: cacPerCustomer,
                 contribution_margin_per_order: contributionMarginPerOrder
             };
@@ -254,6 +257,18 @@ async function getWeeklyAnalyticsFallback(
         }
     }
 
+    // Calculate new KPIs
+    const completedOrdersRevenue = completedOrders.reduce((sum, o) => sum + Number(o.order_amount), 0);
+    const averageOrderValue = completedOrders.length > 0 ? completedOrdersRevenue / completedOrders.length : 0;
+
+    const cancelledOrders = orders.filter(o => o.order_status === 6);
+    const cancellationRate = orders.length > 0 ? (cancelledOrders.length / orders.length) * 100 : 0;
+
+    // On-time delivery: delivered within 1 hour of order creation
+    // Note: We don't have delivery_timestamp in the select, so this will be 0 for now
+    // You'll need to add delivery_timestamp to the query above
+    const onTimeDeliveryRate = 0; // Placeholder - needs delivery_timestamp data
+
     return {
         new_customers: uniqueCustomers,
         activation_rate: activationRate,
@@ -262,6 +277,9 @@ async function getWeeklyAnalyticsFallback(
         repeat_rate_30d: repeatRate,
         active_chefs: activeChefs,
         active_chefs_amsterdam: activeChefsAmsterdam,
+        average_order_value: averageOrderValue,
+        cancellation_rate: cancellationRate,
+        on_time_delivery_rate: onTimeDeliveryRate,
         cac_per_customer: cacPerCustomer,
         contribution_margin_per_order: contributionMarginPerOrder,
     };

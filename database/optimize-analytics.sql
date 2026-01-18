@@ -19,6 +19,14 @@ DECLARE
   manual_rev numeric;
   orders_rev numeric;
   
+  -- New KPI variables
+  average_order_value numeric;
+  cancellation_rate numeric;
+  on_time_delivery_rate numeric;
+  total_orders_count bigint;
+  cancelled_orders_count bigint;
+  on_time_orders_count bigint;
+  
   -- Internal variables
   matching_address_ids uuid[];
   all_period_order_ids integer[]; -- user_ids
@@ -46,7 +54,9 @@ BEGIN
       o.order_status, 
       o.order_amount,
       o.merchant_id,
-      o.delivery_address_id
+      o.delivery_address_id,
+      o.delivery_timestamp,
+      o.created_timestamp
     FROM orders o
     WHERE o.created_timestamp >= start_ts 
       AND o.created_timestamp <= end_ts
@@ -58,25 +68,57 @@ BEGIN
       count(*) FILTER (WHERE order_status BETWEEN 1 AND 5) as comp_orders,
       coalesce(sum(order_amount) FILTER (WHERE order_status BETWEEN 1 AND 5), 0) as rev,
       count(DISTINCT merchant_id) FILTER (WHERE order_status BETWEEN 1 AND 5) as chefs,
-      array_agg(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) as users
+      array_agg(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) as users,
+      -- New KPI calculations
+      count(*) as total_orders,
+      count(*) FILTER (WHERE order_status = 6) as cancelled_orders,
+      count(*) FILTER (WHERE order_status = 5 AND delivery_timestamp IS NOT NULL AND delivery_timestamp <= created_timestamp + 3600) as on_time_orders
     FROM filtered_orders
   )
   SELECT 
     comp_orders, 
     rev, 
     chefs,
-    users
+    users,
+    total_orders,
+    cancelled_orders,
+    on_time_orders
   INTO 
     completed_orders_count, 
     orders_rev, 
     active_chefs_count, 
-    all_period_order_ids
+    all_period_order_ids,
+    total_orders_count,
+    cancelled_orders_count,
+    on_time_orders_count
   FROM period_stats;
 
   -- Handle nulls
   completed_orders_count := coalesce(completed_orders_count, 0);
   orders_rev := coalesce(orders_rev, 0);
   active_chefs_count := coalesce(active_chefs_count, 0);
+  total_orders_count := coalesce(total_orders_count, 0);
+  cancelled_orders_count := coalesce(cancelled_orders_count, 0);
+  on_time_orders_count := coalesce(on_time_orders_count, 0);
+
+  -- Calculate new KPIs
+  IF completed_orders_count > 0 THEN
+    average_order_value := orders_rev / completed_orders_count;
+  ELSE
+    average_order_value := 0;
+  END IF;
+
+  IF total_orders_count > 0 THEN
+    cancellation_rate := (cancelled_orders_count::numeric / total_orders_count::numeric) * 100;
+  ELSE
+    cancellation_rate := 0;
+  END IF;
+
+  IF completed_orders_count > 0 THEN
+    on_time_delivery_rate := (on_time_orders_count::numeric / completed_orders_count::numeric) * 100;
+  ELSE
+    on_time_delivery_rate := 0;
+  END IF;
 
   -- 3. Calculate New Customers
   -- Users who ordered in this period AND their FIRST order ever is in this period
@@ -147,6 +189,9 @@ BEGIN
     'repeat_rate_30d', 0, -- Same as activation rate
     'active_chefs', active_chefs_count,
     'active_chefs_amsterdam', coalesce(active_chefs_amsterdam, 0),
+    'average_order_value', average_order_value,
+    'cancellation_rate', cancellation_rate,
+    'on_time_delivery_rate', on_time_delivery_rate,
     'cac_per_customer', 0, -- Frontend calculates this from config
     'contribution_margin_per_order', 0, -- Frontend calculates this from total revenue
     'total_revenue', total_revenue, -- Added this to return object!

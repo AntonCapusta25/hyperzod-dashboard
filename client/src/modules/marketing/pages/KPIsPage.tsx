@@ -174,6 +174,9 @@ export default function KPIsPage() {
                 ['Completed Orders', analytics.completed_orders],
                 ['Completed Orders (Amsterdam)', analytics.completed_orders_amsterdam],
                 ['30-Day Repeat Rate', `${analytics.repeat_rate_30d.toFixed(1)}%`],
+                ['Average Order Value', `€${analytics.average_order_value.toFixed(2)}`],
+                ['Cancellation Rate', `${analytics.cancellation_rate.toFixed(1)}%`],
+                ['On-Time Delivery Rate', `${analytics.on_time_delivery_rate.toFixed(1)}%`],
                 ['Active Chefs', analytics.active_chefs],
                 ['Active Chefs (Amsterdam)', analytics.active_chefs_amsterdam],
                 ['CAC per Customer', analytics.cac_per_customer ? `€${analytics.cac_per_customer.toFixed(2)}` : 'N/A'],
@@ -452,6 +455,18 @@ export default function KPIsPage() {
                                 <div className="bg-white p-6 rounded-lg shadow border-2 border-dashed border-gray-300">
                                     <div className="text-sm text-gray-600 mb-1">Contribution Margin</div>
                                     <div className="text-3xl font-bold text-gray-900">{formatCurrency(analytics.contribution_margin_per_order)}</div>
+                                </div>
+                                <div className="bg-white p-6 rounded-lg shadow">
+                                    <div className="text-sm text-gray-600 mb-1">Average Order Value</div>
+                                    <div className="text-3xl font-bold text-green-600">{formatCurrency(analytics.average_order_value)}</div>
+                                </div>
+                                <div className="bg-white p-6 rounded-lg shadow">
+                                    <div className="text-sm text-gray-600 mb-1">Cancellation Rate</div>
+                                    <div className="text-3xl font-bold text-red-600">{formatPercentage(analytics.cancellation_rate)}</div>
+                                </div>
+                                <div className="bg-white p-6 rounded-lg shadow">
+                                    <div className="text-sm text-gray-600 mb-1">On-Time Delivery Rate</div>
+                                    <div className="text-3xl font-bold text-blue-600">{formatPercentage(analytics.on_time_delivery_rate)}</div>
                                 </div>
                             </div>
 

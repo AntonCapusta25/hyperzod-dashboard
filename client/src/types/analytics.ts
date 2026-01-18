@@ -7,6 +7,9 @@ export interface WeeklyAnalytics {
     repeat_rate_30d: number; // % of customers who ordered again within 30 days
     active_chefs: number; // Active merchants accepting orders
     active_chefs_amsterdam: number; // Active merchants in Amsterdam
+    average_order_value: number; // Average order value (AOV)
+    cancellation_rate: number; // % of orders that were cancelled
+    on_time_delivery_rate: number; // % of orders delivered on time
 
     // Metrics requiring configuration
     cac_per_customer?: number; // Customer Acquisition Cost (needs marketing spend)

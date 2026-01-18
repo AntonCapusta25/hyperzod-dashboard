@@ -151,45 +151,71 @@ export async function getOrdersByCity(
     const startTs = Math.floor(startDate.getTime() / 1000);
     const endTs = Math.floor(endDate.getTime() / 1000);
 
-    // Get all completed orders
+    // Get all completed orders with merchant info
     const { data: orders } = await supabase
         .from('orders')
-        .select('delivery_address_id, order_amount')
+        .select('delivery_address_id, order_amount, merchant_id')
         .gte('created_timestamp', startTs)
         .lte('created_timestamp', endTs)
         .eq('order_status', 5);
 
     if (!orders || orders.length === 0) return [];
 
-    // Get addresses
+    // Get delivery addresses
     const addressIds = [...new Set(orders.map(o => o.delivery_address_id).filter(Boolean))];
     const addressMap = new Map<string, { city: string }>();
 
-    const batchSize = 100;
-    for (let i = 0; i < addressIds.length; i += batchSize) {
-        const batch = addressIds.slice(i, i + batchSize);
-        const { data: addresses } = await supabase
-            .from('delivery_addresses')
-            .select('id, city')
-            .in('id', batch);
+    if (addressIds.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < addressIds.length; i += batchSize) {
+            const batch = addressIds.slice(i, i + batchSize);
+            const { data: addresses } = await supabase
+                .from('delivery_addresses')
+                .select('id, city')
+                .in('id', batch);
 
-        addresses?.forEach(a => {
-            if (a.city) addressMap.set(a.id, { city: a.city });
-        });
+            addresses?.forEach(a => {
+                if (a.city) addressMap.set(a.id, { city: a.city });
+            });
+        }
+    }
+
+    // Get merchant cities as fallback
+    const merchantIds = [...new Set(orders.map(o => o.merchant_id).filter(Boolean))];
+    const merchantCityMap = new Map<string, string>();
+
+    if (merchantIds.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < merchantIds.length; i += batchSize) {
+            const batch = merchantIds.slice(i, i + batchSize);
+            const { data: merchants } = await supabase
+                .from('merchants')
+                .select('merchant_id, city')
+                .in('merchant_id', batch);
+
+            merchants?.forEach(m => {
+                if (m.city) merchantCityMap.set(m.merchant_id, m.city);
+            });
+        }
     }
 
     // Group by city
     const cityStats = new Map<string, { order_count: number; revenue: number }>();
 
     orders.forEach(order => {
-        const address = addressMap.get(order.delivery_address_id);
-        if (!address?.city) return;
-
-        if (!cityStats.has(address.city)) {
-            cityStats.set(address.city, { order_count: 0, revenue: 0 });
+        // Try delivery address city first, then merchant city
+        let city = addressMap.get(order.delivery_address_id)?.city;
+        if (!city && order.merchant_id) {
+            city = merchantCityMap.get(order.merchant_id);
         }
 
-        const stats = cityStats.get(address.city)!;
+        if (!city) return; // Skip if no city found
+
+        if (!cityStats.has(city)) {
+            cityStats.set(city, { order_count: 0, revenue: 0 });
+        }
+
+        const stats = cityStats.get(city)!;
         stats.order_count++;
         stats.revenue += Number(order.order_amount);
     });
