@@ -6,6 +6,15 @@ import OrdersOverTimeChart from '../components/charts/OrdersOverTimeChart';
 import RevenueTrendChart from '../components/charts/RevenueTrendChart';
 import OrdersByCityChart from '../components/charts/OrdersByCityChart';
 import { TrendingUp, TrendingDown, Users, ChefHat, Package, DollarSign } from 'lucide-react';
+import { supabase } from '../../../lib/supabase';
+
+interface RecentActivity {
+    id: string;
+    type: 'order' | 'merchant' | 'client';
+    message: string;
+    timestamp: Date;
+    color: string;
+}
 
 export default function OverviewPage() {
     const [loading, setLoading] = useState(true);
@@ -19,6 +28,7 @@ export default function OverviewPage() {
         totalClients: 0,
         totalRevenue: 0,
     });
+    const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
 
     useEffect(() => {
         async function loadData() {
@@ -50,6 +60,9 @@ export default function OverviewPage() {
                     totalClients: analytics.new_customers,
                     totalRevenue,
                 });
+
+                // Fetch recent activity
+                await loadRecentActivity();
             } catch (error) {
                 console.error('Error loading overview data:', error);
             } finally {
@@ -58,6 +71,123 @@ export default function OverviewPage() {
         }
         loadData();
     }, []);
+
+    async function loadRecentActivity() {
+        try {
+            const activities: RecentActivity[] = [];
+
+            // Get recent orders (last 5)
+            const { data: recentOrders } = await supabase
+                .from('orders')
+                .select('order_id, created_timestamp, order_status, delivery_address_id, merchant_id')
+                .order('created_timestamp', { ascending: false })
+                .limit(5);
+
+            // Get delivery addresses and merchant cities for orders
+            if (recentOrders && recentOrders.length > 0) {
+                const addressIds = recentOrders
+                    .map(o => o.delivery_address_id)
+                    .filter(Boolean);
+
+                const merchantIds = recentOrders
+                    .map(o => o.merchant_id)
+                    .filter(Boolean);
+
+                // Fetch delivery addresses
+                const { data: addresses } = await supabase
+                    .from('delivery_addresses')
+                    .select('id, city')
+                    .in('id', addressIds);
+
+                // Fetch merchant cities as fallback
+                const { data: merchants } = await supabase
+                    .from('merchants')
+                    .select('merchant_id, city, name')
+                    .in('merchant_id', merchantIds);
+
+                const addressMap = new Map(addresses?.map(a => [a.id, a.city]) || []);
+                const merchantMap = new Map(merchants?.map(m => [m.merchant_id, { city: m.city, name: m.name }]) || []);
+
+                recentOrders.forEach(order => {
+                    // Try delivery address first, then merchant city
+                    let city = addressMap.get(order.delivery_address_id);
+                    let merchantName = '';
+
+                    if (order.merchant_id) {
+                        const merchantData = merchantMap.get(order.merchant_id);
+                        if (!city && merchantData) {
+                            city = merchantData.city;
+                        }
+                        merchantName = merchantData?.name || '';
+                    }
+
+                    city = city || 'Unknown';
+
+                    const timestamp = new Date(order.created_timestamp * 1000);
+                    const status = order.order_status === 5 ? 'completed' : 'placed';
+                    const merchantInfo = merchantName ? ` (${merchantName})` : '';
+
+                    activities.push({
+                        id: `order-${order.order_id}`,
+                        type: 'order',
+                        message: `Order ${status} in ${city}${merchantInfo}`,
+                        timestamp,
+                        color: order.order_status === 5 ? 'bg-green-500' : 'bg-blue-500',
+                    });
+                });
+            }
+
+            // Get recent merchants (last 5)
+            const { data: recentMerchants } = await supabase
+                .from('merchants')
+                .select('merchant_id, name, city, created_at')
+                .order('created_at', { ascending: false })
+                .limit(3);
+
+            recentMerchants?.forEach(merchant => {
+                activities.push({
+                    id: `merchant-${merchant.merchant_id}`,
+                    type: 'merchant',
+                    message: `New chef "${merchant.name}" in ${merchant.city}`,
+                    timestamp: new Date(merchant.created_at),
+                    color: 'bg-purple-500',
+                });
+            });
+
+            // Get recent clients (last 3)
+            const { data: recentClients } = await supabase
+                .from('clients')
+                .select('hyperzod_id, first_name, last_name, hyperzod_created_at')
+                .order('hyperzod_created_at', { ascending: false })
+                .limit(2);
+
+            recentClients?.forEach(client => {
+                const name = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'New client';
+                activities.push({
+                    id: `client-${client.hyperzod_id}`,
+                    type: 'client',
+                    message: `${name} signed up`,
+                    timestamp: new Date(client.hyperzod_created_at),
+                    color: 'bg-orange-500',
+                });
+            });
+
+            // Sort by timestamp and take top 10
+            activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+            setRecentActivity(activities.slice(0, 10));
+        } catch (error) {
+            console.error('Error loading recent activity:', error);
+        }
+    }
+
+    function getTimeAgo(date: Date): string {
+        const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+
+        if (seconds < 60) return `${seconds}s ago`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        return `${Math.floor(seconds / 86400)}d ago`;
+    }
 
     const StatCard = ({
         title,
@@ -147,30 +277,21 @@ export default function OverviewPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <OrdersByCityChart data={chartData.cityData} loading={false} />
 
-                {/* Recent Activity Placeholder */}
+                {/* Recent Activity - Now with real data */}
                 <div className="bg-white rounded-lg shadow p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
                     <div className="space-y-4">
-                        <div className="flex items-center text-sm">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                            <span className="text-gray-600">New order from Amsterdam</span>
-                            <span className="ml-auto text-gray-400">2m ago</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                            <span className="text-gray-600">New chef registered in Enschede</span>
-                            <span className="ml-auto text-gray-400">15m ago</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
-                            <span className="text-gray-600">Email campaign sent to 1,234 clients</span>
-                            <span className="ml-auto text-gray-400">1h ago</span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                            <span className="text-gray-600">Order completed in Utrecht</span>
-                            <span className="ml-auto text-gray-400">2h ago</span>
-                        </div>
+                        {recentActivity.length > 0 ? (
+                            recentActivity.map(activity => (
+                                <div key={activity.id} className="flex items-center text-sm">
+                                    <div className={`w-2 h-2 ${activity.color} rounded-full mr-3`}></div>
+                                    <span className="text-gray-600 flex-1">{activity.message}</span>
+                                    <span className="ml-auto text-gray-400">{getTimeAgo(activity.timestamp)}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-gray-400 text-center py-4">No recent activity</div>
+                        )}
                     </div>
                 </div>
             </div>
