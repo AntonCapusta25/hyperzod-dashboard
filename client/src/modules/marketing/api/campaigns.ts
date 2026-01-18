@@ -118,16 +118,16 @@ export async function sendCampaign(id: string): Promise<{ success: boolean; sent
     try {
         console.log('Invoking Edge Function for campaign:', id);
 
-        // Use direct fetch instead of supabase.functions.invoke to debug/fix connection issues
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+        // Use anon key for Edge Function authentication
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-campaign`, {
+        const response = await fetch(`${supabaseUrl}/functions/v1/send-campaign`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `Bearer ${anonKey}`,
                 'Content-Type': 'application/json',
-                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+                'apikey': anonKey
             },
             body: JSON.stringify({ id })
         });
