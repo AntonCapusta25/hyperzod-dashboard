@@ -149,68 +149,67 @@ export default function TemplatesPage() {
                         </div>
                     </div>
 
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="block text-sm font-medium text-gray-700">
-                                Email Content
-                            </label>
-                            <div className="flex items-center gap-4">
-                                {/* Editor Mode Toggle */}
-                                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                            Email Content
+                        </label>
+                        <div className="flex items-center gap-4">
+                            {/* Editor Mode Toggle */}
+                            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                                <button
+                                    onClick={() => setEditorMode('visual')}
+                                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${editorMode === 'visual'
+                                            ? 'bg-white text-blue-600 shadow-sm'
+                                            : 'text-gray-600 hover:text-gray-900'
+                                        }`}
+                                >
+                                    Visual
+                                </button>
+                                <button
+                                    onClick={() => setEditorMode('html')}
+                                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${editorMode === 'html'
+                                            ? 'bg-white text-blue-600 shadow-sm'
+                                            : 'text-gray-600 hover:text-gray-900'
+                                        }`}
+                                >
+                                    HTML
+                                </button>
+                            </div>
+                            {/* Variable Buttons */}
+                            <div className="flex gap-2">
+                                {VARIABLES.map(v => (
                                     <button
-                                        onClick={() => setEditorMode('visual')}
-                                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${editorMode === 'visual'
-                                                ? 'bg-white text-blue-600 shadow-sm'
-                                                : 'text-gray-600 hover:text-gray-900'
-                                            }`}
+                                        key={v.value}
+                                        onClick={() => insertVariable(v.value)}
+                                        className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                                        title={`Insert ${v.label}`}
                                     >
-                                        Visual
+                                        {v.value}
                                     </button>
-                                    <button
-                                        onClick={() => setEditorMode('html')}
-                                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${editorMode === 'html'
-                                                ? 'bg-white text-blue-600 shadow-sm'
-                                                : 'text-gray-600 hover:text-gray-900'
-                                            }`}
-                                    >
-                                        HTML
-                                    </button>
-                                </div>
-                                {/* Variable Buttons */}
-                                <div className="flex gap-2">
-                                    {VARIABLES.map(v => (
-                                        <button
-                                            key={v.value}
-                                            onClick={() => insertVariable(v.value)}
-                                            className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
-                                            title={`Insert ${v.label}`}
-                                        >
-                                            {v.value}
-                                        </button>
-                                    ))}
-                                </div>
+                                ))}
                             </div>
                         </div>
-                        <div className="mb-12">
-                            {editorMode === 'visual' ? (
-                                <Editor
-                                    value={currentTemplate.html_content || ''}
-                                    onChange={(content) => setCurrentTemplate(prev => ({ ...prev, html_content: content }))}
-                                    className="h-full"
-                                />
-                            ) : (
-                                <textarea
-                                    value={currentTemplate.html_content || ''}
-                                    onChange={(e) => setCurrentTemplate(prev => ({ ...prev, html_content: e.target.value }))}
-                                    placeholder="Paste your HTML template here..."
-                                    className="w-full h-96 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                                    spellCheck={false}
-                                />
-                            )}
-                        </div>
+                    </div>
+                    <div className="mb-12">
+                        {editorMode === 'visual' ? (
+                            <Editor
+                                value={currentTemplate.html_content || ''}
+                                onChange={(content) => setCurrentTemplate(prev => ({ ...prev, html_content: content }))}
+                                className="h-full"
+                            />
+                        ) : (
+                            <textarea
+                                value={currentTemplate.html_content || ''}
+                                onChange={(e) => setCurrentTemplate(prev => ({ ...prev, html_content: e.target.value }))}
+                                placeholder="Paste your HTML template here..."
+                                className="w-full h-96 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                                spellCheck={false}
+                            />
+                        )}
                     </div>
                 </div>
             </div>
+            </div >
         );
     }
 

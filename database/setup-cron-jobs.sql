@@ -8,14 +8,15 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 GRANT USAGE ON SCHEMA cron TO postgres;
 
 -- ============================================
--- SYNC ORDERS - Every 10 minutes
+-- SYNC ORDERS - Once daily at 2 AM
 -- ============================================
--- This calls the sync-orders Edge Function every 10 minutes
+-- This calls the sync-orders Edge Function once per day
 -- to fetch recent orders from Hyperzod API
+-- Runs at 2 AM to avoid peak hours
 
 SELECT cron.schedule(
     'sync-orders-job',           -- Job name
-    '*/10 * * * *',              -- Every 10 minutes
+    '0 2 * * *',              -- Once daily at 2:00 AM
     $$
     SELECT
       net.http_post(
@@ -27,14 +28,15 @@ SELECT cron.schedule(
 );
 
 -- ============================================
--- SYNC CLIENTS - Every 30 minutes
+-- SYNC CLIENTS - Once daily at 2:30 AM
 -- ============================================
--- This calls the sync-clients Edge Function every 30 minutes
+-- This calls the sync-clients Edge Function once per day
 -- to fetch recent clients from Hyperzod API
+-- Runs at 2:30 AM to avoid peak hours
 
 SELECT cron.schedule(
     'sync-clients-job',          -- Job name
-    '*/30 * * * *',              -- Every 30 minutes
+    '30 2 * * *',              -- Once daily at 2:30 AM
     $$
     SELECT
       net.http_post(
@@ -46,14 +48,15 @@ SELECT cron.schedule(
 );
 
 -- ============================================
--- SYNC MERCHANTS - Every hour
+-- SYNC MERCHANTS - Once daily at 3 AM
 -- ============================================
--- This calls the sync-merchants Edge Function every hour
+-- This calls the sync-merchants Edge Function once per day
 -- to keep merchant online/offline status up to date
+-- Runs at 3 AM to avoid peak hours
 
 SELECT cron.schedule(
     'sync-merchants-job',        -- Job name
-    '0 * * * *',                 -- Every hour (at minute 0)
+    '0 3 * * *',                 -- Once daily at 3:00 AM
     $$
     SELECT
       net.http_post(
@@ -77,22 +80,3 @@ SELECT * FROM cron.job;
 SELECT * FROM cron.job_run_details 
 ORDER BY start_time DESC 
 LIMIT 20;
-
--- ============================================
--- To REMOVE a cron job (if needed)
--- ============================================
--- SELECT cron.unschedule('sync-orders-job');
--- SELECT cron.unschedule('sync-clients-job');
--- SELECT cron.unschedule('sync-merchants-job');
-
--- ============================================
--- NOTES:
--- ============================================
--- 1. The service_role key is used (not anon key) for cron jobs
--- 2. Cron schedule format: minute hour day month day-of-week
---    */10 * * * * = every 10 minutes
---    */30 * * * * = every 30 minutes
---    0 * * * * = every hour (at minute 0)
--- 3. Jobs run in UTC timezone
--- 4. You can adjust the schedule as needed
--- 5. Monitor job_run_details to check for errors
