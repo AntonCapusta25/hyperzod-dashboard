@@ -14,6 +14,7 @@ interface CityStats {
     published: number;
     lat: number;
     lng: number;
+    chefs: { name: string; isOnline: boolean }[];
 }
 
 // Real coordinates for major Dutch cities
@@ -88,12 +89,18 @@ export function MapView({ merchants, loading }: MapViewProps) {
                 online: 0,
                 published: 0,
                 lat: coords.lat,
-                lng: coords.lng
+                lng: coords.lng,
+                chefs: []
             };
 
             existing.total++;
-            if (merchant.is_accepting_orders && merchant.is_open) existing.online++;
+            const isOnline = merchant.is_accepting_orders && merchant.is_open;
+            if (isOnline) existing.online++;
             existing.published++;
+            existing.chefs.push({
+                name: merchant.name || 'Unknown Chef',
+                isOnline
+            });
 
             stats.set(matchedCity, existing);
         });
@@ -146,17 +153,41 @@ export function MapView({ merchants, loading }: MapViewProps) {
                                     }}
                                 >
                                     <Tooltip direction="top" offset={[0, -10]} opacity={0.9}>
-                                        <div className="text-sm">
-                                            <div className="font-bold">{city.name}</div>
-                                            <div>{city.total} published chef{city.total !== 1 ? 's' : ''}</div>
-                                            <div className="text-green-600">{city.online} online</div>
+                                        <div className="text-sm max-w-xs">
+                                            <div className="font-bold mb-1">{city.name}</div>
+                                            <div className="text-xs text-gray-600 mb-2">
+                                                {city.total} chef{city.total !== 1 ? 's' : ''} • {city.online} online
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto">
+                                                {city.chefs.map((chef, idx) => (
+                                                    <div key={idx} className="flex items-center gap-1 py-0.5">
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${chef.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                                        <span className={chef.isOnline ? 'text-green-700 font-medium' : 'text-gray-600'}>
+                                                            {chef.name}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </Tooltip>
                                     <Popup>
-                                        <div className="text-sm">
-                                            <h3 className="font-bold text-base mb-1">{city.name}</h3>
-                                            <p><strong>{city.total}</strong> published chefs</p>
-                                            <p className="text-green-600"><strong>{city.online}</strong> currently online</p>
+                                        <div className="text-sm min-w-[200px]">
+                                            <h3 className="font-bold text-base mb-2">{city.name}</h3>
+                                            <p className="text-gray-600 mb-3">
+                                                <strong>{city.total}</strong> chef{city.total !== 1 ? 's' : ''} •
+                                                <strong className="text-green-600"> {city.online}</strong> online
+                                            </p>
+                                            <div className="max-h-60 overflow-y-auto border-t pt-2">
+                                                <p className="text-xs font-semibold text-gray-500 mb-1">CHEFS:</p>
+                                                {city.chefs.map((chef, idx) => (
+                                                    <div key={idx} className="flex items-center gap-2 py-1">
+                                                        <div className={`w-2 h-2 rounded-full ${chef.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                                        <span className={chef.isOnline ? 'text-green-700 font-medium' : 'text-gray-700'}>
+                                                            {chef.name}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </Popup>
                                 </CircleMarker>
