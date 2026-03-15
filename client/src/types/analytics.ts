@@ -14,6 +14,12 @@ export interface WeeklyAnalytics {
     // Metrics requiring configuration
     cac_per_customer?: number; // Customer Acquisition Cost (needs marketing spend)
     contribution_margin_per_order?: number; // Margin per order (needs COGS, commission)
+
+    // Retention & Distribution Metrics
+    returning_customer_revenue_percent: number;
+    power_user_count: number;
+    average_orders_per_customer: number;
+    order_frequency_distribution: Record<string, number>;
 }
 
 // Generic analytics (same as WeeklyAnalytics but for any date range)

@@ -89,7 +89,11 @@ export async function getWeeklyAnalytics(
                 cancellation_rate: Number(data.cancellation_rate || 0),
                 on_time_delivery_rate: Number(data.on_time_delivery_rate || 0),
                 cac_per_customer: cacPerCustomer,
-                contribution_margin_per_order: contributionMarginPerOrder
+                contribution_margin_per_order: contributionMarginPerOrder,
+                returning_customer_revenue_percent: 0, // RPC needs update
+                power_user_count: 0, // RPC needs update
+                average_orders_per_customer: 0, // RPC needs update
+                order_frequency_distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 } // RPC needs update
             };
         }
     } catch (err) {
@@ -113,10 +117,9 @@ async function getWeeklyAnalyticsFallback(
 ): Promise<WeeklyAnalytics> {
     console.log(`[Analytics] Fetching analytics for timestamps ${weekStartTimestamp} - ${weekEndTimestamp}`);
 
-    // Get all orders for the time period first
     const { data: allOrders } = await supabase
         .from('orders')
-        .select('order_id, user_id, order_status, order_amount, delivery_address_id, merchant_id')
+        .select('order_id, user_id, order_status, order_amount, delivery_address_id, merchant_id, created_timestamp, delivery_timestamp')
         .gte('created_timestamp', weekStartTimestamp)
         .lte('created_timestamp', weekEndTimestamp);
 
@@ -264,10 +267,66 @@ async function getWeeklyAnalyticsFallback(
     const cancelledOrders = orders.filter(o => o.order_status === 6);
     const cancellationRate = orders.length > 0 ? (cancelledOrders.length / orders.length) * 100 : 0;
 
+    // Calculate Retention & Distribution Metrics
+    const orderCountByUser = new Map<number, number>();
+    const revenueByUser = new Map<number, number>();
+
+    completedOrders.forEach(o => {
+        if (o.user_id) {
+            orderCountByUser.set(o.user_id, (orderCountByUser.get(o.user_id) || 0) + 1);
+            revenueByUser.set(o.user_id, (revenueByUser.get(o.user_id) || 0) + Number(o.order_amount));
+        }
+    });
+
+    const totalCustomersInPeriod = orderCountByUser.size;
+    const totalOrdersInPeriod = completedOrders.length;
+    const averageOrdersPerCustomer = totalCustomersInPeriod > 0 ? totalOrdersInPeriod / totalCustomersInPeriod : 0;
+
+    const frequencyDistribution: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 };
+    let powerUserCount = 0;
+
+    orderCountByUser.forEach(count => {
+        if (count >= 5) frequencyDistribution['5+']++;
+        else frequencyDistribution[count.toString()]++;
+
+        if (count >= 3) powerUserCount++;
+    });
+
+    // Identify returning customers (those who ordered before this period)
+    const returningCustomerIds = new Set<number>();
+    if (customerIds.length > 0) {
+        // Query in batches if customerIds is large
+        const batchSize = 100;
+        for (let i = 0; i < customerIds.length; i += batchSize) {
+            const batch = customerIds.slice(i, i + batchSize);
+            const { data: previousOrders } = await supabase
+                .from('orders')
+                .select('user_id')
+                .in('user_id', batch)
+                .lt('created_timestamp', weekStartTimestamp);
+            
+            previousOrders?.forEach(o => returningCustomerIds.add(o.user_id));
+        }
+    }
+
+    const returningRevenue = Array.from(revenueByUser.entries())
+        .filter(([userId, _]) => returningCustomerIds.has(userId))
+        .reduce((sum, [_, revenue]) => sum + revenue, 0);
+
+    const returningCustomerRevenuePercent = totalRevenue > 0 ? (returningRevenue / totalRevenue) * 100 : 0;
+
     // On-time delivery: delivered within 1 hour of order creation
-    // Note: We don't have delivery_timestamp in the select, so this will be 0 for now
-    // You'll need to add delivery_timestamp to the query above
-    const onTimeDeliveryRate = 0; // Placeholder - needs delivery_timestamp data
+    // Note: We need delivery_timestamp for this
+    const onTimeOrders = completedOrders.filter(o => {
+        // @ts-ignore - Assuming delivery_timestamp might exist in backend but not in types yet
+        if (o.delivery_timestamp && o.created_timestamp) {
+            // @ts-ignore
+            const deliveryTime = (o.delivery_timestamp - o.created_timestamp) / 60; // in minutes
+            return deliveryTime <= 60;
+        }
+        return false;
+    });
+    const onTimeDeliveryRate = completedOrders.length > 0 ? (onTimeOrders.length / completedOrders.length) * 100 : 0;
 
     return {
         new_customers: uniqueCustomers,
@@ -282,5 +341,9 @@ async function getWeeklyAnalyticsFallback(
         on_time_delivery_rate: onTimeDeliveryRate,
         cac_per_customer: cacPerCustomer,
         contribution_margin_per_order: contributionMarginPerOrder,
+        returning_customer_revenue_percent: returningCustomerRevenuePercent,
+        power_user_count: powerUserCount,
+        average_orders_per_customer: averageOrdersPerCustomer,
+        order_frequency_distribution: frequencyDistribution
     };
 }

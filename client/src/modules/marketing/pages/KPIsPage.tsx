@@ -3,12 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useWeeklyAnalytics } from '../hooks/useWeeklyAnalytics';
 import type { AnalyticsConfig, DateRange, DateRangePreset } from '../../../types/analytics';
 import { getDateRangeForPreset, formatDateRange, getPresetLabel } from '../utils/dateRangeUtils';
-import { getTimeSeriesData, getOrdersByCity, getOrderStatusDistribution } from '../api/chartData';
+import { getTimeSeriesData, getOrdersByCity, getOrderStatusDistribution, getOrdersByHour } from '../api/chartData';
 import type { TimeSeriesData, CityData, OrderStatusData } from '../api/chartData';
 import OrdersOverTimeChart from '../components/charts/OrdersOverTimeChart';
 import RevenueTrendChart from '../components/charts/RevenueTrendChart';
 import OrdersByCityChart from '../components/charts/OrdersByCityChart';
 import OrderStatusChart from '../components/charts/OrderStatusChart';
+import PeakHoursChart from '../components/charts/PeakHoursChart';
+import OrderFrequencyChart from '../components/charts/OrderFrequencyChart';
 import { supabase } from '../../../lib/supabase';
 
 import { jsPDF } from 'jspdf';
@@ -41,7 +43,8 @@ export default function KPIsPage() {
         timeSeries: TimeSeriesData[];
         cityData: CityData[];
         statusData: OrderStatusData[];
-    }>({ timeSeries: [], cityData: [], statusData: [] });
+        hourData: Record<number, number>;
+    }>({ timeSeries: [], cityData: [], statusData: [], hourData: {} });
     const [chartsLoading, setChartsLoading] = useState(false);
     const [configSaved, setConfigSaved] = useState(false);
 
@@ -51,12 +54,13 @@ export default function KPIsPage() {
             setChartsLoading(true);
             try {
                 const city = activeCityTab === 'all' ? undefined : activeCityTab.charAt(0).toUpperCase() + activeCityTab.slice(1);
-                const [timeSeries, cityData, statusData] = await Promise.all([
+                const [timeSeries, cityData, statusData, hourData] = await Promise.all([
                     getTimeSeriesData(dateRange.from, dateRange.to, city),
                     getOrdersByCity(dateRange.from, dateRange.to),
                     getOrderStatusDistribution(dateRange.from, dateRange.to, city),
+                    getOrdersByHour(dateRange.from, dateRange.to, city),
                 ]);
-                setChartData({ timeSeries, cityData, statusData });
+                setChartData({ timeSeries, cityData, statusData, hourData });
             } catch (error) {
                 console.error('Error loading chart data:', error);
             } finally {
@@ -457,6 +461,15 @@ export default function KPIsPage() {
                                     <div className="text-3xl font-bold text-gray-900">{formatCurrency(analytics.contribution_margin_per_order)}</div>
                                 </div>
                                 <div className="bg-white p-6 rounded-lg shadow">
+                                    <div className="text-sm text-gray-600 mb-1">Returning Revenue %</div>
+                                    <div className="text-3xl font-bold text-indigo-600">{formatPercentage(analytics.returning_customer_revenue_percent)}</div>
+                                </div>
+                                <div className="bg-white p-6 rounded-lg shadow">
+                                    <div className="text-sm text-gray-600 mb-1">Avg Orders per Customer</div>
+                                    <div className="text-3xl font-bold text-gray-900">{analytics.average_orders_per_customer.toFixed(2)}</div>
+                                    <div className="text-xs text-gray-500 mt-1">{analytics.power_user_count} Power Users (3+ orders)</div>
+                                </div>
+                                <div className="bg-white p-6 rounded-lg shadow">
                                     <div className="text-sm text-gray-600 mb-1">Average Order Value</div>
                                     <div className="text-3xl font-bold text-green-600">{formatCurrency(analytics.average_order_value)}</div>
                                 </div>
@@ -478,6 +491,8 @@ export default function KPIsPage() {
                                     <RevenueTrendChart data={chartData.timeSeries} loading={chartsLoading} />
                                     <OrdersByCityChart data={chartData.cityData} loading={chartsLoading} />
                                     <OrderStatusChart data={chartData.statusData} loading={chartsLoading} />
+                                    <OrderFrequencyChart data={analytics.order_frequency_distribution} loading={loading} />
+                                    <PeakHoursChart data={chartData.hourData} loading={chartsLoading} />
                                 </div>
                             </div>
 

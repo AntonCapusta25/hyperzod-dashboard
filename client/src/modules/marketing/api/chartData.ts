@@ -315,3 +315,59 @@ export async function getOrderStatusDistribution(
         }))
         .sort((a, b) => b.count - a.count);
 }
+
+/**
+ * Get orders by hour of day for peak hour analysis
+ */
+export async function getOrdersByHour(
+    startDate: Date,
+    endDate: Date,
+    city?: string
+): Promise<Record<number, number>> {
+    const startTs = Math.floor(startDate.getTime() / 1000);
+    const endTs = Math.floor(endDate.getTime() / 1000);
+
+    const { data: orders } = await supabase
+        .from('orders')
+        .select('created_timestamp, delivery_address_id')
+        .gte('created_timestamp', startTs)
+        .lte('created_timestamp', endTs)
+        .gte('order_status', 1)
+        .lte('order_status', 5);
+
+    if (!orders) return {};
+
+    // Filter by city if needed
+    let filteredOrders = orders;
+    if (city) {
+        const addressIds = [...new Set(orders.map(o => o.delivery_address_id).filter(Boolean))];
+        const batchSize = 100;
+        const matchingAddressIds = new Set<string>();
+
+        for (let i = 0; i < addressIds.length; i += batchSize) {
+            const batch = addressIds.slice(i, i + batchSize);
+            const { data: addresses } = await supabase
+                .from('delivery_addresses')
+                .select('id')
+                .in('id', batch)
+                .or(`city.ilike.%${city}%,address.ilike.%${city}%`);
+
+            addresses?.forEach(a => matchingAddressIds.add(a.id));
+        }
+
+        filteredOrders = orders.filter(o => matchingAddressIds.has(o.delivery_address_id));
+    }
+
+    const hourCounts: Record<number, number> = {};
+    for (let i = 0; i < 24; i++) hourCounts[i] = 0;
+
+    filteredOrders.forEach(o => {
+        if (o.created_timestamp) {
+            const date = new Date(o.created_timestamp * 1000);
+            const hour = date.getHours();
+            hourCounts[hour]++;
+        }
+    });
+
+    return hourCounts;
+}
