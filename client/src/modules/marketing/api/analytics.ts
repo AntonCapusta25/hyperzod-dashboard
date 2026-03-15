@@ -5,9 +5,80 @@ import { getRepeatRate } from './repeatRate';
 import { calculateNewCustomers } from './newCustomersHelper';
 
 export async function previewSegmentCount(_rules: any): Promise<number> {
-    // Placeholder for the function body, as it was not provided in the instruction.
-    // Please replace this with the actual implementation.
     return 0;
+}
+
+interface BehavioralMetrics {
+    returning_customer_revenue_percent: number;
+    power_user_count: number;
+    average_orders_per_customer: number;
+    order_frequency_distribution: Record<string, number>;
+}
+
+/**
+ * Calculate behavioral metrics from order data
+ */
+async function calculateBehavioralMetrics(
+    orders: any[],
+    totalRevenue: number,
+    weekStartTimestamp: number
+): Promise<BehavioralMetrics> {
+    const orderCountByUser = new Map<number, number>();
+    const revenueByUser = new Map<number, number>();
+    const customerIds = new Set<number>();
+
+    orders.forEach(o => {
+        if (o.user_id && o.order_status >= 1 && o.order_status <= 5) {
+            orderCountByUser.set(o.user_id, (orderCountByUser.get(o.user_id) || 0) + 1);
+            revenueByUser.set(o.user_id, (revenueByUser.get(o.user_id) || 0) + Number(o.order_amount));
+            customerIds.add(o.user_id);
+        }
+    });
+
+    const totalCustomersInPeriod = orderCountByUser.size;
+    const completedOrders = orders.filter(o => o.order_status >= 1 && o.order_status <= 5);
+    const totalOrdersInPeriod = completedOrders.length;
+    const averageOrdersPerCustomer = totalCustomersInPeriod > 0 ? totalOrdersInPeriod / totalCustomersInPeriod : 0;
+
+    const frequencyDistribution: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 };
+    let powerUserCount = 0;
+
+    orderCountByUser.forEach(count => {
+        if (count >= 5) frequencyDistribution['5+']++;
+        else frequencyDistribution[count.toString()]++;
+
+        if (count >= 3) powerUserCount++;
+    });
+
+    // Identify returning customers
+    const returningCustomerIds = new Set<number>();
+    const customerIdsArray = Array.from(customerIds);
+    if (customerIdsArray.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < customerIdsArray.length; i += batchSize) {
+            const batch = customerIdsArray.slice(i, i + batchSize);
+            const { data: previousOrders } = await supabase
+                .from('orders')
+                .select('user_id')
+                .in('user_id', batch)
+                .lt('created_timestamp', weekStartTimestamp);
+            
+            previousOrders?.forEach(o => returningCustomerIds.add(o.user_id));
+        }
+    }
+
+    const returningRevenue = Array.from(revenueByUser.entries())
+        .filter(([userId, _]) => returningCustomerIds.has(userId))
+        .reduce((sum, [_, revenue]) => sum + revenue, 0);
+
+    const returningCustomerRevenuePercent = totalRevenue > 0 ? (returningRevenue / totalRevenue) * 100 : 0;
+
+    return {
+        returning_customer_revenue_percent: returningCustomerRevenuePercent,
+        power_user_count: powerUserCount,
+        average_orders_per_customer: averageOrdersPerCustomer,
+        order_frequency_distribution: frequencyDistribution
+    };
 }
 
 /**
@@ -77,6 +148,30 @@ export async function getWeeklyAnalytics(
                 ? config.weekly_marketing_spend / data.new_customers
                 : undefined;
 
+            // Fetch minimal order data for behavioral metrics
+            let behavioralMetrics: BehavioralMetrics = {
+                returning_customer_revenue_percent: 0,
+                power_user_count: 0,
+                average_orders_per_customer: 0,
+                order_frequency_distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 }
+            };
+
+            if (data.completed_orders > 0) {
+                const { data: ordersForBehavioral } = await supabase
+                    .from('orders')
+                    .select('user_id, order_status, order_amount')
+                    .gte('created_timestamp', weekStartTimestamp)
+                    .lte('created_timestamp', weekEndTimestamp);
+                
+                if (ordersForBehavioral) {
+                    behavioralMetrics = await calculateBehavioralMetrics(
+                        ordersForBehavioral,
+                        totalRevenue,
+                        weekStartTimestamp
+                    );
+                }
+            }
+
             return {
                 new_customers: data.new_customers,
                 activation_rate: activationRate,
@@ -90,10 +185,7 @@ export async function getWeeklyAnalytics(
                 on_time_delivery_rate: Number(data.on_time_delivery_rate || 0),
                 cac_per_customer: cacPerCustomer,
                 contribution_margin_per_order: contributionMarginPerOrder,
-                returning_customer_revenue_percent: 0, // RPC needs update
-                power_user_count: 0, // RPC needs update
-                average_orders_per_customer: 0, // RPC needs update
-                order_frequency_distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 } // RPC needs update
+                ...behavioralMetrics
             };
         }
     } catch (err) {
@@ -268,52 +360,11 @@ async function getWeeklyAnalyticsFallback(
     const cancellationRate = orders.length > 0 ? (cancelledOrders.length / orders.length) * 100 : 0;
 
     // Calculate Retention & Distribution Metrics
-    const orderCountByUser = new Map<number, number>();
-    const revenueByUser = new Map<number, number>();
-
-    completedOrders.forEach(o => {
-        if (o.user_id) {
-            orderCountByUser.set(o.user_id, (orderCountByUser.get(o.user_id) || 0) + 1);
-            revenueByUser.set(o.user_id, (revenueByUser.get(o.user_id) || 0) + Number(o.order_amount));
-        }
-    });
-
-    const totalCustomersInPeriod = orderCountByUser.size;
-    const totalOrdersInPeriod = completedOrders.length;
-    const averageOrdersPerCustomer = totalCustomersInPeriod > 0 ? totalOrdersInPeriod / totalCustomersInPeriod : 0;
-
-    const frequencyDistribution: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 };
-    let powerUserCount = 0;
-
-    orderCountByUser.forEach(count => {
-        if (count >= 5) frequencyDistribution['5+']++;
-        else frequencyDistribution[count.toString()]++;
-
-        if (count >= 3) powerUserCount++;
-    });
-
-    // Identify returning customers (those who ordered before this period)
-    const returningCustomerIds = new Set<number>();
-    if (customerIds.length > 0) {
-        // Query in batches if customerIds is large
-        const batchSize = 100;
-        for (let i = 0; i < customerIds.length; i += batchSize) {
-            const batch = customerIds.slice(i, i + batchSize);
-            const { data: previousOrders } = await supabase
-                .from('orders')
-                .select('user_id')
-                .in('user_id', batch)
-                .lt('created_timestamp', weekStartTimestamp);
-            
-            previousOrders?.forEach(o => returningCustomerIds.add(o.user_id));
-        }
-    }
-
-    const returningRevenue = Array.from(revenueByUser.entries())
-        .filter(([userId, _]) => returningCustomerIds.has(userId))
-        .reduce((sum, [_, revenue]) => sum + revenue, 0);
-
-    const returningCustomerRevenuePercent = totalRevenue > 0 ? (returningRevenue / totalRevenue) * 100 : 0;
+    const behavioralMetrics = await calculateBehavioralMetrics(
+        completedOrders,
+        totalRevenue,
+        weekStartTimestamp
+    );
 
     // On-time delivery: delivered within 1 hour of order creation
     // Note: We need delivery_timestamp for this
@@ -341,9 +392,6 @@ async function getWeeklyAnalyticsFallback(
         on_time_delivery_rate: onTimeDeliveryRate,
         cac_per_customer: cacPerCustomer,
         contribution_margin_per_order: contributionMarginPerOrder,
-        returning_customer_revenue_percent: returningCustomerRevenuePercent,
-        power_user_count: powerUserCount,
-        average_orders_per_customer: averageOrdersPerCustomer,
-        order_frequency_distribution: frequencyDistribution
+        ...behavioralMetrics
     };
 }
