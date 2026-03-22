@@ -11,6 +11,7 @@ import ClientsPage from './modules/marketing/pages/ClientsPage';
 import OrdersPage from './modules/marketing/pages/OrdersPage';
 import EmailCampaignsPage from './modules/marketing/pages/EmailCampaignsPage';
 import KPIsPage from './modules/marketing/pages/KPIsPage';
+import BegeleidersDashboard from './modules/marketing/pages/BegeleidersDashboard';
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
                   <Route path="orders" element={<OrdersPage />} />
                   <Route path="campaigns/*" element={<EmailCampaignsPage />} />
                   <Route path="kpis/*" element={<KPIsPage />} />
+                  <Route path="begeleiders" element={<BegeleidersDashboard />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>

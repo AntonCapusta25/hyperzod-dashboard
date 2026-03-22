@@ -13,6 +13,7 @@ import {
     X,
     LogOut,
     UserCircle,
+    Building2,
 } from 'lucide-react';
 import { useAuth } from '../modules/auth/contexts/AuthContext';
 
@@ -68,6 +69,11 @@ const navigationItems: NavItem[] = [
             { name: 'Enschede', path: '/dashboard/kpis/enschede', icon: BarChart3 },
             { name: 'Utrecht', path: '/dashboard/kpis/utrecht', icon: BarChart3 },
         ],
+    },
+    {
+        name: 'Begeleiders',
+        path: '/dashboard/begeleiders',
+        icon: Building2,
     },
 ];
 
