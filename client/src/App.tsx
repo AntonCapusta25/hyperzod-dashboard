@@ -12,6 +12,7 @@ import OrdersPage from './modules/marketing/pages/OrdersPage';
 import EmailCampaignsPage from './modules/marketing/pages/EmailCampaignsPage';
 import KPIsPage from './modules/marketing/pages/KPIsPage';
 import BegeleidersDashboard from './modules/marketing/pages/BegeleidersDashboard';
+import PublicAnalyticsPage from './modules/marketing/pages/PublicAnalyticsPage';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/public/analytics" element={<PublicAnalyticsPage />} />
 
           {/* Protected Dashboard Routes */}
           <Route path="/dashboard" element={
