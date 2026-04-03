@@ -39,14 +39,16 @@ export default function PeakHoursChart({ data, loading, hideNumbers = false }: P
                         tick={hideNumbers ? false : { fontSize: 12 }} 
                         axisLine={!hideNumbers}
                     />
-                    <Tooltip
-                        formatter={(value: any) => hideNumbers ? ['Volume', 'Orders'] : [value, 'Orders']}
-                        contentStyle={{
-                            backgroundColor: '#FFF',
-                            border: '1px solid #E5E7EB',
-                            borderRadius: '8px',
-                        }}
-                    />
+                    {!hideNumbers && (
+                        <Tooltip
+                            formatter={(value: any) => hideNumbers ? ['Volume', 'Orders'] : [value, 'Orders']}
+                            contentStyle={{
+                                backgroundColor: '#FFF',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '8px',
+                            }}
+                        />
+                    )}
                     <Bar dataKey="orders" radius={[4, 4, 0, 0]}>
                         {chartData.map((entry, index) => (
                             <Cell 
