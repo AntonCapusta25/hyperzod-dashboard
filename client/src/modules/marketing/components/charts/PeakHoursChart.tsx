@@ -3,9 +3,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 interface PeakHoursChartProps {
     data: Record<number, number>;
     loading?: boolean;
+    hideNumbers?: boolean;
 }
 
-export default function PeakHoursChart({ data, loading }: PeakHoursChartProps) {
+export default function PeakHoursChart({ data, loading, hideNumbers = false }: PeakHoursChartProps) {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-80 bg-white rounded-lg shadow p-6">
@@ -25,7 +26,7 @@ export default function PeakHoursChart({ data, loading }: PeakHoursChartProps) {
         <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Orders by Hour of Day</h3>
             <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <BarChart data={chartData} margin={{ top: 5, right: hideNumbers ? 5 : 20, left: hideNumbers ? -20 : 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
                     <XAxis 
                         dataKey="hour" 
@@ -33,8 +34,13 @@ export default function PeakHoursChart({ data, loading }: PeakHoursChartProps) {
                         tick={{ fontSize: 10 }}
                         interval={3}
                     />
-                    <YAxis stroke="#6B7280" tick={{ fontSize: 12 }} />
+                    <YAxis 
+                        stroke="#6B7280" 
+                        tick={hideNumbers ? false : { fontSize: 12 }} 
+                        axisLine={!hideNumbers}
+                    />
                     <Tooltip
+                        formatter={(value: any) => hideNumbers ? ['Volume', 'Orders'] : [value, 'Orders']}
                         contentStyle={{
                             backgroundColor: '#FFF',
                             border: '1px solid #E5E7EB',

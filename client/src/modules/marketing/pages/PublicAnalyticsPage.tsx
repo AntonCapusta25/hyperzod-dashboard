@@ -5,12 +5,11 @@ import type { DateRangePreset } from '../../../types/analytics';
 import PeakHoursChart from '../components/charts/PeakHoursChart';
 import PeakDaysChart from '../components/charts/PeakDaysChart';
 import { Calendar, BarChart3, ChefHat } from 'lucide-react';
+import type { DateRange } from '../../../types/analytics';
 
 export default function PublicAnalyticsPage() {
-    // The valid presets in DateRangePreset are likely 'today', 'this_week', 'last_week', 'last_30_days', 'this_month', 'last_month', 'this_year', 'all_time' or similar
-    // I'll default to 'last_30_days' if the type doesn't allow 'this_month' directly. Wait, the lint error says `"this_month"` is not assignable.
-    // I'll set it to 'this_week'. Wait, let's look at `DateRangePreset` in the code, or just cast it for now to avoid types until I see the type definition.
     const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset | string>('last_30_days');
+    const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset('last_month'));
     const [loading, setLoading] = useState(true);
     const [hourData, setHourData] = useState<Record<number, number>>({});
     const [dayData, setDayData] = useState<Record<number, number>>({});
@@ -19,7 +18,6 @@ export default function PublicAnalyticsPage() {
         async function loadData() {
             setLoading(true);
             try {
-                const dateRange = getDateRangeForPreset(dateRangePreset as DateRangePreset);
                 const [hData, dData] = await Promise.all([
                     getOrdersByHour(dateRange.from, dateRange.to),
                     getOrdersByDayOfWeek(dateRange.from, dateRange.to),
@@ -34,7 +32,13 @@ export default function PublicAnalyticsPage() {
         }
 
         loadData();
-    }, [dateRangePreset]);
+    }, [dateRange.from, dateRange.to]);
+
+    const handlePresetChange = (preset: DateRangePreset) => {
+        setDateRangePreset(preset);
+        const newRange = getDateRangeForPreset(preset);
+        setDateRange(newRange);
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -68,28 +72,56 @@ export default function PublicAnalyticsPage() {
                     </div>
 
                     {/* Date Range Filter */}
-                    <div className="flex items-center gap-2 bg-white rounded-lg shadow-sm border border-gray-200 p-1">
-                        <Calendar className="w-4 h-4 text-gray-400 ml-2" />
-                        <select
-                            value={dateRangePreset as string}
-                            onChange={(e) => setDateRangePreset(e.target.value as DateRangePreset)}
-                            className="bg-transparent border-none text-sm font-medium text-gray-700 focus:ring-0 cursor-pointer py-1.5 pl-1 pr-8"
-                        >
-                            <option value="this_week">This Week</option>
-                            <option value="last_week">Last Week</option>
-                            <option value="last_month">Last Month</option>
-                            <option value="last_3_months">Last 3 Months</option>
-                        </select>
+                    <div className="flex flex-col sm:flex-row gap-4 bg-white rounded-lg shadow-sm border border-gray-200 p-2 text-sm">
+                        <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            <select
+                                value={dateRangePreset as string}
+                                onChange={(e) => handlePresetChange(e.target.value as DateRangePreset)}
+                                className="bg-transparent border-none font-medium text-gray-700 focus:ring-0 cursor-pointer py-1 block w-full"
+                            >
+                                <option value="this_week">This Week</option>
+                                <option value="last_week">Last Week</option>
+                                <option value="last_month">Last Month</option>
+                                <option value="last_3_months">Last 3 Months</option>
+                                <option value="custom">Custom Range</option>
+                            </select>
+                        </div>
+                        <div className="hidden sm:block w-px bg-gray-200"></div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={dateRange.from.toISOString().split('T')[0]}
+                                onChange={(e) => {
+                                    const newFrom = new Date(e.target.value);
+                                    setDateRange({ ...dateRange, from: newFrom, preset: 'custom' });
+                                    setDateRangePreset('custom');
+                                }}
+                                className="px-2 py-1 border border-gray-200 rounded text-gray-700 bg-gray-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <span className="text-gray-400">-</span>
+                            <input
+                                type="date"
+                                value={dateRange.to.toISOString().split('T')[0]}
+                                onChange={(e) => {
+                                    const newTo = new Date(e.target.value);
+                                    newTo.setHours(23, 59, 59, 999);
+                                    setDateRange({ ...dateRange, to: newTo, preset: 'custom' });
+                                    setDateRangePreset('custom');
+                                }}
+                                className="px-2 py-1 border border-gray-200 rounded text-gray-700 bg-gray-50 focus:bg-white focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
                     </div>
                 </div>
 
                 {/* Charts Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-1">
-                        <PeakHoursChart data={hourData} loading={loading} />
+                        <PeakHoursChart data={hourData} loading={loading} hideNumbers={true} />
                     </div>
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-1">
-                        <PeakDaysChart data={dayData} loading={loading} />
+                        <PeakDaysChart data={dayData} loading={loading} hideNumbers={true} />
                     </div>
                 </div>
             </main>
