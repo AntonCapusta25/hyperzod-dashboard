@@ -3,13 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useWeeklyAnalytics } from '../hooks/useWeeklyAnalytics';
 import type { AnalyticsConfig, DateRange, DateRangePreset } from '../../../types/analytics';
 import { getDateRangeForPreset, formatDateRange, getPresetLabel } from '../utils/dateRangeUtils';
-import { getTimeSeriesData, getOrdersByCity, getOrderStatusDistribution, getOrdersByHour } from '../api/chartData';
+import { getTimeSeriesData, getOrdersByCity, getOrderStatusDistribution, getOrdersByHour, getOrdersByDayOfWeek } from '../api/chartData';
 import type { TimeSeriesData, CityData, OrderStatusData } from '../api/chartData';
 import OrdersOverTimeChart from '../components/charts/OrdersOverTimeChart';
 import RevenueTrendChart from '../components/charts/RevenueTrendChart';
 import OrdersByCityChart from '../components/charts/OrdersByCityChart';
 import OrderStatusChart from '../components/charts/OrderStatusChart';
 import PeakHoursChart from '../components/charts/PeakHoursChart';
+import PeakDaysChart from '../components/charts/PeakDaysChart';
 import OrderFrequencyChart from '../components/charts/OrderFrequencyChart';
 import { supabase } from '../../../lib/supabase';
 
@@ -44,7 +45,8 @@ export default function KPIsPage() {
         cityData: CityData[];
         statusData: OrderStatusData[];
         hourData: Record<number, number>;
-    }>({ timeSeries: [], cityData: [], statusData: [], hourData: {} });
+        dayData: Record<number, number>;
+    }>({ timeSeries: [], cityData: [], statusData: [], hourData: {}, dayData: {} });
     const [chartsLoading, setChartsLoading] = useState(false);
     const [configSaved, setConfigSaved] = useState(false);
 
@@ -54,13 +56,14 @@ export default function KPIsPage() {
             setChartsLoading(true);
             try {
                 const city = activeCityTab === 'all' ? undefined : activeCityTab.charAt(0).toUpperCase() + activeCityTab.slice(1);
-                const [timeSeries, cityData, statusData, hourData] = await Promise.all([
+                const [timeSeries, cityData, statusData, hourData, dayData] = await Promise.all([
                     getTimeSeriesData(dateRange.from, dateRange.to, city),
                     getOrdersByCity(dateRange.from, dateRange.to),
                     getOrderStatusDistribution(dateRange.from, dateRange.to, city),
                     getOrdersByHour(dateRange.from, dateRange.to, city),
+                    getOrdersByDayOfWeek(dateRange.from, dateRange.to, city),
                 ]);
-                setChartData({ timeSeries, cityData, statusData, hourData });
+                setChartData({ timeSeries, cityData, statusData, hourData, dayData });
             } catch (error) {
                 console.error('Error loading chart data:', error);
             } finally {
@@ -493,6 +496,7 @@ export default function KPIsPage() {
                                     <OrderStatusChart data={chartData.statusData} loading={chartsLoading} />
                                     <OrderFrequencyChart data={analytics.order_frequency_distribution} loading={loading} />
                                     <PeakHoursChart data={chartData.hourData} loading={chartsLoading} />
+                                    <PeakDaysChart data={chartData.dayData} loading={chartsLoading} />
                                 </div>
                             </div>
 
