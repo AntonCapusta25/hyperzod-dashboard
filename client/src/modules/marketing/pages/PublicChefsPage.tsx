@@ -67,27 +67,28 @@ export default function PublicChefsPage() {
     const generateChefStory = (chef: PublicChef) => {
         const primaryCuisine = chef.cuisine[0] || 'International';
         const city = chef.city;
+        const hasCity = city && city !== 'Unknown';
         const name = chef.name.split("'")[0].split(" ")[0];
 
         const intros = [
-            `${name} is a cornerstone of the culinary scene in ${city}.`,
-            `Hailing from ${city}, ${name} possesses a deep passion for authentic flavors.`,
-            `In the heart of ${city}, ${name} is reimagining home-cooked traditions.`,
-            `${name} brings the vibrant culture of their heritage to the kitchens of ${city}.`
+            `${name} is a cornerstone of the culinary scene${hasCity ? ` in ${city}` : ''}.`,
+            `${hasCity ? `Hailing from ${city}, ` : ''}${name} possesses a deep passion for authentic flavors.`,
+            `${hasCity ? `In the heart of ${city}, ` : 'With a focus on local quality, '}${name} is reimagining home-cooked traditions.`,
+            `${name} brings the vibrant culture of their heritage to the kitchens${hasCity ? ` of ${city}` : ''}.`
         ];
 
         const niches = [
             `Specializing in ${primaryCuisine} cuisine, they take pride in using traditional spices and heirloom recipes.`,
             `Their mastery of ${primaryCuisine} cooking is reflected in every balanced, aromatic plate they prepare.`,
             `Focused on the art of ${primaryCuisine} food, they offer a niche experience that bridges cultures through taste.`,
-            `By blending local ingredients with ${primaryCuisine} techniques, they create something truly unique for their customers.`
+            `By blending quality ingredients with ${primaryCuisine} techniques, they create something truly unique for their customers.`
         ];
 
         const opportunities = [
             `This is a golden opportunity to experience restaurant-quality ${primaryCuisine} food in a more personal, home-style setting.`,
             `Whether for a quiet dinner or a special gathering, ${name} provides a level of authenticity and care that is rare to find.`,
-            `Supporting ${name} means investing in local talent while treating yourself to the best ${primaryCuisine} dishes in ${city}.`,
-            `Their kitchen serves as a bridge, connecting neighbors to the rich history and soul of ${primaryCuisine} culture.`
+            `Supporting ${name} means investing in local talent while treating yourself to the best ${primaryCuisine} dishes.`,
+            `Their kitchen serves as a bridge, connecting customers to the rich history and soul of ${primaryCuisine} culture.`
         ];
 
         const hash = chef.merchant_id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -287,7 +288,6 @@ export default function PublicChefsPage() {
                                         
                                         <div className="pt-4 border-t border-gray-50 flex items-center justify-between text-[10px] uppercase tracking-widest font-bold text-gray-400">
                                             <span>Niche: {chef.cuisine[0] || 'Artisan'}</span>
-                                            <span className="text-blue-500">View Menu &rarr;</span>
                                         </div>
                                     </div>
                                 </div>
