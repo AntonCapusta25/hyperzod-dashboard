@@ -40,6 +40,23 @@ export default function PublicChefsPage() {
         };
     }, [chefs]);
 
+    const generateChefStory = (chef: PublicChef) => {
+        const primaryCuisine = chef.cuisine[0] || 'International';
+        const city = chef.city;
+        const name = chef.name.split("'")[0].split(" ")[0]; // Get first name or base name
+
+        const templates = [
+            `${name} is a master of ${primaryCuisine} cuisine in ${city}, bringing authentic family recipes to the local community. They specialize in traditional techniques that preserve the true soul of every dish.`,
+            `Deeply rooted in ${city}, ${name} offers a premium window into ${primaryCuisine} flavors. Their kitchen is a hub for those seeking authentic, high-quality home-cooked meals with a personal touch.`,
+            `From the heart of ${city}, ${name} is dedicated to showcasing the rich diversity of ${primaryCuisine} traditions. They provide a unique opportunity to experience global tastes without leaving your neighborhood.`,
+            `Bringing years of culinary passion to ${city}, ${name} focuses on the fine details of ${primaryCuisine} cooking. Every order is a chance to support a local artisan dedicated to their craft.`
+        ];
+
+        // Use merchant_id to pick a stable template
+        const index = chef.merchant_id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % templates.length;
+        return templates[index];
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Hero Section */}
@@ -140,7 +157,7 @@ export default function PublicChefsPage() {
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-wrap gap-2 mb-4">
+                                    <div className="flex flex-wrap gap-2 mb-6">
                                         {chef.cuisine.slice(0, 3).map(c => (
                                             <span key={c} className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold">
                                                 {c}
@@ -148,11 +165,16 @@ export default function PublicChefsPage() {
                                         ))}
                                     </div>
 
-                                    {chef.message && (
-                                        <p className="text-gray-500 text-sm line-clamp-2 italic border-l-2 border-gray-100 pl-3 py-1">
-                                            "{chef.message}"
+                                    <div className="space-y-4">
+                                        <p className="text-gray-600 text-sm leading-relaxed">
+                                            {generateChefStory(chef)}
                                         </p>
-                                    )}
+                                        
+                                        <div className="pt-4 border-t border-gray-50 flex items-center justify-between text-[10px] uppercase tracking-widest font-bold text-gray-400">
+                                            <span>Niche: {chef.cuisine[0] || 'Artisan'}</span>
+                                            <span className="text-blue-500">View Menu &rarr;</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
