@@ -31,6 +31,29 @@ export default function PublicChefsPage() {
         );
     }, [chefs, searchTerm]);
 
+    const CUISINE_TO_COUNTRY: Record<string, { name: string, flag: string }> = {
+        'Indian': { name: 'India', flag: '🇮🇳' },
+        'Asian': { name: 'Asia', flag: '🌏' },
+        'Middle Eastern': { name: 'Middle East', flag: '🕌' },
+        'Caribbean': { name: 'Caribbean', flag: '🏝️' },
+        'Mexican': { name: 'Mexico', flag: '🇲🇽' },
+        'Latin American': { name: 'Latin America', flag: '💃' },
+        'Italian': { name: 'Italy', flag: '🇮🇹' },
+        'Korean': { name: 'South Korea', flag: '🇰🇷' },
+        'Surinamese': { name: 'Suriname', flag: '🇸🇷' },
+        'Indonesian': { name: 'Indonesia', flag: '🇮🇩' },
+        'Japanese': { name: 'Japan', flag: '🇯🇵' },
+        'Thai': { name: 'Thailand', flag: '🇹🇭' },
+        'Vietnamese': { name: 'Vietnam', flag: '🇻🇳' },
+        'Turkish': { name: 'Turkey', flag: '🇹🇷' },
+        'Greek': { name: 'Greece', flag: '🇬🇷' },
+        'Spanish': { name: 'Spain', flag: '🇪🇸' },
+        'French': { name: 'France', flag: '🇫🇷' },
+        'American': { name: 'USA', flag: '🇺🇸' },
+        'African': { name: 'Africa', flag: '🌍' },
+        'Chinese': { name: 'China', flag: '🇨🇳' }
+    };
+
     const stats = useMemo(() => {
         const uniqueCuisines = new Set(chefs.flatMap(c => c.cuisine));
         const uniqueCities = new Set(chefs.map(c => c.city));
@@ -55,12 +78,29 @@ export default function PublicChefsPage() {
             .sort((a, b) => b.value - a.value)
             .slice(0, 8);
 
+        // Data for Countries/Origins
+        const countryMap: Record<string, { count: number, flag: string }> = {};
+        chefs.flatMap(c => c.cuisine).forEach(cuisine => {
+            const countryInfo = CUISINE_TO_COUNTRY[cuisine];
+            if (countryInfo) {
+                if (!countryMap[countryInfo.name]) {
+                    countryMap[countryInfo.name] = { count: 0, flag: countryInfo.flag };
+                }
+                countryMap[countryInfo.name].count += 1;
+            }
+        });
+
+        const countryData = Object.entries(countryMap)
+            .map(([name, info]) => ({ name, ...info }))
+            .sort((a, b) => b.count - a.count);
+
         return {
             chefCount: chefs.length,
             cuisineCount: uniqueCuisines.size,
             cityCount: uniqueCities.size,
             cuisineData,
-            cityData
+            cityData,
+            countryData
         };
     }, [chefs]);
 
@@ -222,6 +262,35 @@ export default function PublicChefsPage() {
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {/* Global Diversity Section */}
+            {!loading && stats.countryData.length > 0 && (
+                <section className="bg-blue-50/50 py-24">
+                    <div className="max-w-7xl mx-auto px-4">
+                        <div className="text-center mb-16">
+                            <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-6 flex items-center justify-center gap-4">
+                                <Globe className="w-10 h-10 text-blue-600" />
+                                Global Diversity
+                            </h2>
+                            <p className="text-xl text-gray-500 max-w-2xl mx-auto">
+                                Our community is a melting pot of global cultures, bringing flavors from every corner of the world to your doorstep.
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap justify-center gap-4">
+                            {stats.countryData.map((country) => (
+                                <div key={country.name} className="px-6 py-4 bg-white rounded-2xl shadow-sm border border-blue-100 flex items-center gap-3 hover:shadow-md transition-all">
+                                    <span className="text-2xl">{country.flag}</span>
+                                    <div>
+                                        <div className="font-bold text-gray-900">{country.name}</div>
+                                        <div className="text-xs text-blue-600 font-medium">{country.count} Specializations</div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </section>
