@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getPublicChefs, type PublicChef } from '../api/chefs';
-import { ChefHat, MapPin, Star, Utensils, Users, Globe, Heart, ShieldCheck } from 'lucide-react';
+import { ChefHat, MapPin, Star, Utensils, Users, Globe, Heart, ShieldCheck, PieChart as PieIcon, BarChart3 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
 export default function PublicChefsPage() {
     const [chefs, setChefs] = useState<PublicChef[]>([]);
@@ -33,29 +34,72 @@ export default function PublicChefsPage() {
     const stats = useMemo(() => {
         const uniqueCuisines = new Set(chefs.flatMap(c => c.cuisine));
         const uniqueCities = new Set(chefs.map(c => c.city));
+        
+        // Data for Cuisine Chart
+        const cuisineMap: Record<string, number> = {};
+        chefs.flatMap(c => c.cuisine).forEach(cuisine => {
+            cuisineMap[cuisine] = (cuisineMap[cuisine] || 0) + 1;
+        });
+        const cuisineData = Object.entries(cuisineMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8);
+
+        // Data for Cities Chart
+        const cityMap: Record<string, number> = {};
+        chefs.forEach(c => {
+            cityMap[c.city] = (cityMap[c.city] || 0) + 1;
+        });
+        const cityData = Object.entries(cityMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8);
+
         return {
             chefCount: chefs.length,
             cuisineCount: uniqueCuisines.size,
-            cityCount: uniqueCities.size
+            cityCount: uniqueCities.size,
+            cuisineData,
+            cityData
         };
     }, [chefs]);
 
     const generateChefStory = (chef: PublicChef) => {
         const primaryCuisine = chef.cuisine[0] || 'International';
         const city = chef.city;
-        const name = chef.name.split("'")[0].split(" ")[0]; // Get first name or base name
+        const name = chef.name.split("'")[0].split(" ")[0];
 
-        const templates = [
-            `${name} is a master of ${primaryCuisine} cuisine in ${city}, bringing authentic family recipes to the local community. They specialize in traditional techniques that preserve the true soul of every dish.`,
-            `Deeply rooted in ${city}, ${name} offers a premium window into ${primaryCuisine} flavors. Their kitchen is a hub for those seeking authentic, high-quality home-cooked meals with a personal touch.`,
-            `From the heart of ${city}, ${name} is dedicated to showcasing the rich diversity of ${primaryCuisine} traditions. They provide a unique opportunity to experience global tastes without leaving your neighborhood.`,
-            `Bringing years of culinary passion to ${city}, ${name} focuses on the fine details of ${primaryCuisine} cooking. Every order is a chance to support a local artisan dedicated to their craft.`
+        const intros = [
+            `${name} is a cornerstone of the culinary scene in ${city}.`,
+            `Hailing from ${city}, ${name} possesses a deep passion for authentic flavors.`,
+            `In the heart of ${city}, ${name} is reimagining home-cooked traditions.`,
+            `${name} brings the vibrant culture of their heritage to the kitchens of ${city}.`
         ];
 
-        // Use merchant_id to pick a stable template
-        const index = chef.merchant_id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % templates.length;
-        return templates[index];
+        const niches = [
+            `Specializing in ${primaryCuisine} cuisine, they take pride in using traditional spices and heirloom recipes.`,
+            `Their mastery of ${primaryCuisine} cooking is reflected in every balanced, aromatic plate they prepare.`,
+            `Focused on the art of ${primaryCuisine} food, they offer a niche experience that bridges cultures through taste.`,
+            `By blending local ingredients with ${primaryCuisine} techniques, they create something truly unique for their customers.`
+        ];
+
+        const opportunities = [
+            `This is a golden opportunity to experience restaurant-quality ${primaryCuisine} food in a more personal, home-style setting.`,
+            `Whether for a quiet dinner or a special gathering, ${name} provides a level of authenticity and care that is rare to find.`,
+            `Supporting ${name} means investing in local talent while treating yourself to the best ${primaryCuisine} dishes in ${city}.`,
+            `Their kitchen serves as a bridge, connecting neighbors to the rich history and soul of ${primaryCuisine} culture.`
+        ];
+
+        const hash = chef.merchant_id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        
+        const i1 = (hash * 7) % intros.length;
+        const i2 = (hash * 13) % niches.length;
+        const i3 = (hash * 17) % opportunities.length;
+
+        return `${intros[i1]} ${niches[i2]} ${opportunities[i3]}`;
     };
+
+    const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4', '#F472B6', '#6366F1'];
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -110,6 +154,77 @@ export default function PublicChefsPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Community Insights */}
+            {!loading && chefs.length > 0 && (
+                <section className="max-w-7xl mx-auto w-full px-4 pt-20">
+                    <div className="flex flex-col md:flex-row items-center gap-4 mb-10">
+                        <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
+                            <BarChart3 className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h2 className="text-3xl font-extrabold text-gray-900">Community Insights</h2>
+                            <p className="text-gray-500 font-medium">Visualizing our culinary diversity and reach</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Cuisine Distribution Chart */}
+                        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+                            <div className="flex items-center gap-3 mb-8">
+                                <div className="p-2 bg-indigo-50 text-indigo-500 rounded-lg">
+                                    <PieIcon className="w-5 h-5" />
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900">Cuisine Distribution</h3>
+                            </div>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={stats.cuisineData}
+                                            innerRadius={60}
+                                            outerRadius={100}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                        >
+                                            {stats.cuisineData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip 
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                        />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* City Density Chart */}
+                        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+                            <div className="flex items-center gap-3 mb-8">
+                                <div className="p-2 bg-emerald-50 text-emerald-500 rounded-lg">
+                                    <MapPin className="w-5 h-5" />
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900">Top Cities by Chef Count</h3>
+                            </div>
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={stats.cityData} layout="vertical" margin={{ left: 20 }}>
+                                        <XAxis type="number" hide />
+                                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} fontSize={12} width={80} />
+                                        <RechartsTooltip 
+                                            cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                        />
+                                        <Bar dataKey="value" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            )}
 
             {/* Chef Grid */}
             <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-20">
