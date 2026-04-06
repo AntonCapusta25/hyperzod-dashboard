@@ -187,7 +187,7 @@ export default function PublicChefsPage() {
                                             paddingAngle={5}
                                             dataKey="value"
                                         >
-                                            {stats.cuisineData.map((entry, index) => (
+                                            {stats.cuisineData.map((_entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
