@@ -42,7 +42,7 @@ export interface AnalyticsFilters {
 /**
  * Date range preset options
  */
-export type DateRangePreset = 'this_week' | 'last_week' | 'last_month' | 'last_3_months' | 'custom';
+export type DateRangePreset = 'this_week' | 'last_week' | 'last_month' | 'last_3_months' | 'last_year' | 'custom';
 
 /**
  * Date range selection

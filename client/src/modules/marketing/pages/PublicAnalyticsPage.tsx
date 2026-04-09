@@ -8,8 +8,8 @@ import { Calendar, BarChart3, ChefHat } from 'lucide-react';
 import type { DateRange } from '../../../types/analytics';
 
 export default function PublicAnalyticsPage() {
-    const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset | string>('last_30_days');
-    const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset('last_month'));
+    const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset | string>('last_year');
+    const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset('last_year'));
     const [loading, setLoading] = useState(true);
     const [hourData, setHourData] = useState<Record<number, number>>({});
     const [dayData, setDayData] = useState<Record<number, number>>({});
@@ -84,6 +84,7 @@ export default function PublicAnalyticsPage() {
                                 <option value="last_week">Last Week</option>
                                 <option value="last_month">Last Month</option>
                                 <option value="last_3_months">Last 3 Months</option>
+                                <option value="last_year">Last Year</option>
                                 <option value="custom">Custom Range</option>
                             </select>
                         </div>
