@@ -16,9 +16,9 @@ async function checkMerchantData() {
 
     const { data: merchants, error } = await supabase
         .from('merchants')
-        .select('name, city, merchant_categories, cover_image_url, logo_image_url, average_rating, storefront_message')
+        .select('name, city, country, country_code, merchant_categories, cover_image_url, logo_image_url, average_rating, storefront_message')
         .eq('status', true)
-        .limit(5);
+        .limit(20);
 
     if (error) {
         console.error('Error fetching merchants:', error);
@@ -34,6 +34,7 @@ async function checkMerchantData() {
     merchants.forEach((m, i) => {
         console.log(`\n--- Merchant ${i + 1}: ${m.name} ---`);
         console.log(`City: ${m.city}`);
+        console.log(`Country: ${m.country} (${m.country_code})`);
         console.log(`Rating: ${m.average_rating}`);
         console.log(`Categories: ${JSON.stringify(m.merchant_categories)}`);
         console.log(`Logo: ${m.logo_image_url}`);
