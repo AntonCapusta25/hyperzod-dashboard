@@ -14,6 +14,7 @@ import KPIsPage from './modules/marketing/pages/KPIsPage';
 import BegeleidersDashboard from './modules/marketing/pages/BegeleidersDashboard';
 import PublicAnalyticsPage from './modules/marketing/pages/PublicAnalyticsPage';
 import PublicChefsPage from './modules/marketing/pages/PublicChefsPage';
+import PublicRocketGraphsPage from './modules/marketing/pages/PublicRocketGraphsPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/public/analytics" element={<PublicAnalyticsPage />} />
           <Route path="/public/chefs" element={<PublicChefsPage />} />
+          <Route path="/public/rocketgraphs" element={<PublicRocketGraphsPage />} />
 
           {/* Protected Dashboard Routes */}
           <Route path="/dashboard" element={

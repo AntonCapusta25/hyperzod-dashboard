@@ -427,3 +427,110 @@ export async function getOrdersByDayOfWeek(
 
     return dayCounts;
 }
+
+export interface RocketChartData {
+    date: string;
+    total: number;
+}
+
+export interface RocketData {
+    revenueData: RocketChartData[];
+    customerData: RocketChartData[];
+    chefData: RocketChartData[];
+    pipelineData: RocketChartData[];
+    totals: {
+        revenue: number;
+        customers: number;
+        chefs: number;
+        pipeline: number;
+    }
+}
+
+/**
+ * Get cumulative growth data for Rocket Graphs
+ */
+export async function getRocketData(): Promise<RocketData> {
+    // 1. Fetch all completed orders for revenue and customers
+    const { data: orders } = await supabase
+        .from('orders')
+        .select('user_id, order_amount, created_timestamp')
+        .eq('order_status', 5)
+        .order('created_timestamp', { ascending: true });
+
+    // 2. Fetch manual revenue entries
+    const { data: manualRevenue } = await supabase
+        .from('manual_revenue_entries')
+        .select('entry_date, amount')
+        .order('entry_date', { ascending: true });
+
+    // 3. Fetch all merchants for chef growth and pipeline
+    const { data: merchants } = await supabase
+        .from('merchants')
+        .select('status, created_at')
+        .order('created_at', { ascending: true });
+
+    const revenueByDate = new Map<string, number>();
+    const firstOrderDateByCustomer = new Map<string, string>();
+    const activeChefsByDate = new Map<string, number>();
+    const pipelineByDate = new Map<string, number>();
+
+    // Process Orders
+    orders?.forEach(o => {
+        const date = new Date(o.created_timestamp * 1000).toISOString().split('T')[0];
+        revenueByDate.set(date, (revenueByDate.get(date) || 0) + Number(o.order_amount || 0));
+        
+        if (!firstOrderDateByCustomer.has(o.user_id)) {
+            firstOrderDateByCustomer.set(o.user_id, date);
+        }
+    });
+
+    // Process Manual Revenue
+    manualRevenue?.forEach(entry => {
+        const date = entry.entry_date;
+        revenueByDate.set(date, (revenueByDate.get(date) || 0) + Number(entry.amount || 0));
+    });
+
+    // Process Merchants
+    merchants?.forEach(m => {
+        const date = new Date(m.created_at).toISOString().split('T')[0];
+        if (m.status === true) {
+            activeChefsByDate.set(date, (activeChefsByDate.get(date) || 0) + 1);
+        } else {
+            pipelineByDate.set(date, (pipelineByDate.get(date) || 0) + 1);
+        }
+    });
+
+    // Helper to build cumulative data
+    const buildCumulative = (dataMap: Map<string, number>) => {
+        const sortedDates = Array.from(dataMap.keys()).sort();
+        let runningTotal = 0;
+        return sortedDates.map(date => {
+            runningTotal += dataMap.get(date)!;
+            return { date, total: runningTotal };
+        });
+    };
+
+    // Special handling for customers (unique first-time order dates)
+    const newCustomersByDate = new Map<string, number>();
+    firstOrderDateByCustomer.forEach(date => {
+        newCustomersByDate.set(date, (newCustomersByDate.get(date) || 0) + 1);
+    });
+
+    const revenueData = buildCumulative(revenueByDate);
+    const customerData = buildCumulative(newCustomersByDate);
+    const chefData = buildCumulative(activeChefsByDate);
+    const pipelineData = buildCumulative(pipelineByDate);
+
+    return {
+        revenueData,
+        customerData,
+        chefData,
+        pipelineData,
+        totals: {
+            revenue: revenueData[revenueData.length - 1]?.total || 0,
+            customers: customerData[customerData.length - 1]?.total || 0,
+            chefs: chefData[chefData.length - 1]?.total || 0,
+            pipeline: pipelineData[pipelineData.length - 1]?.total || 0
+        }
+    };
+}
