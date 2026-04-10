@@ -435,6 +435,7 @@ export interface RocketChartData {
 
 export interface RocketData {
     revenueData: RocketChartData[];
+    monthlyRevenueData: RocketChartData[];
     customerData: RocketChartData[];
     chefData: RocketChartData[];
     pipelineData: RocketChartData[];
@@ -521,8 +522,21 @@ export async function getRocketData(): Promise<RocketData> {
     const chefData = buildCumulative(activeChefsByDate);
     const pipelineData = buildCumulative(pipelineByDate);
 
+    // Calculate Monthly Revenue (Orders only, no manual/catering revenue)
+    const monthlyRevenueMap = new Map<string, number>();
+    orders?.forEach(o => {
+        const date = new Date(o.created_timestamp * 1000);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyRevenueMap.set(monthKey, (monthlyRevenueMap.get(monthKey) || 0) + Number(o.order_amount || 0));
+    });
+
+    const monthlyRevenueData = Array.from(monthlyRevenueMap.entries())
+        .map(([date, total]) => ({ date, total }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
     return {
         revenueData,
+        monthlyRevenueData,
         customerData,
         chefData,
         pipelineData,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getRocketData, type RocketData } from '../api/chartData';
-import { Rocket, TrendingUp, Users, ChefHat, Layout, ArrowUpRight, Activity } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Rocket, TrendingUp, Users, ChefHat, Layout, ArrowUpRight, Activity, Calendar } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 export default function PublicRocketGraphsPage() {
     const [data, setData] = useState<RocketData | null>(null);
@@ -132,6 +132,35 @@ export default function PublicRocketGraphsPage() {
 
                 {/* Main Charts Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Monthly Revenue Chart */}
+                    <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] overflow-hidden">
+                        <h3 className="text-xl font-bold mb-8 flex items-center gap-3">
+                            <Calendar className="w-5 h-5 text-emerald-400" />
+                            Monthly Revenue (Orders)
+                        </h3>
+                        <div className="h-[400px] w-full mt-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={data.monthlyRevenueData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                    <XAxis 
+                                        dataKey="date" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }} 
+                                    />
+                                    <YAxis hide domain={['auto', 'auto']} />
+                                    <Tooltip content={<CustomTooltip prefix="€" />} />
+                                    <Bar 
+                                        dataKey="total" 
+                                        fill="#10B981" 
+                                        radius={[6, 6, 0, 0]}
+                                        animationDuration={2000}
+                                    />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
                     {/* Revenue Growth Chart */}
                     <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] overflow-hidden">
                         <h3 className="text-xl font-bold mb-8 flex items-center gap-3">
