@@ -448,27 +448,38 @@ export interface RocketData {
 }
 
 /**
- * Get cumulative growth data for Rocket Graphs
+ * Get growth data for Rocket Graphs with date filtering
  */
-export async function getRocketData(): Promise<RocketData> {
-    // 1. Fetch all completed orders for revenue and customers
-    const { data: orders } = await supabase
+export async function getRocketData(startDate?: Date, endDate?: Date): Promise<RocketData> {
+    const endTs = endDate ? Math.floor(endDate.getTime() / 1000) : Math.floor(Date.now() / 1000);
+
+    // 1. Fetch completed orders
+    const ordersQuery = supabase
         .from('orders')
-        .select('user_id, order_amount, created_timestamp')
+        .select('user_id, order_amount, created_timestamp, order_status')
         .eq('order_status', 5)
+        .lte('created_timestamp', endTs)
         .order('created_timestamp', { ascending: true });
 
+    const { data: orders } = await ordersQuery;
+
     // 2. Fetch manual revenue entries
-    const { data: manualRevenue } = await supabase
+    const manualQuery = supabase
         .from('manual_revenue_entries')
         .select('entry_date, amount')
+        .lte('entry_date', endDate ? endDate.toISOString().split('T')[0] : '9999-12-31')
         .order('entry_date', { ascending: true });
 
-    // 3. Fetch all merchants for chef growth and pipeline
-    const { data: merchants } = await supabase
+    const { data: manualRevenue } = await manualQuery;
+
+    // 3. Fetch all merchants
+    const merchantQuery = supabase
         .from('merchants')
         .select('status, created_at')
+        .lte('created_at', endDate ? endDate.toISOString() : new Date().toISOString())
         .order('created_at', { ascending: true });
+
+    const { data: merchants } = await merchantQuery;
 
     const revenueByDate = new Map<string, number>();
     const firstOrderDateByCustomer = new Map<string, string>();
@@ -501,38 +512,56 @@ export async function getRocketData(): Promise<RocketData> {
         }
     });
 
-    // Helper to build cumulative data
-    const buildCumulative = (dataMap: Map<string, number>) => {
+    // Helper to build data within range
+    const filterAndFormat = (dataMap: Map<string, number>, isCumulative: boolean) => {
         const sortedDates = Array.from(dataMap.keys()).sort();
         let runningTotal = 0;
-        return sortedDates.map(date => {
-            runningTotal += dataMap.get(date)!;
-            return { date, total: runningTotal };
+        const result: RocketChartData[] = [];
+        
+        const fromDateStr = startDate ? startDate.toISOString().split('T')[0] : '0000-00-00';
+        
+        sortedDates.forEach(date => {
+            const val = dataMap.get(date)!;
+            runningTotal += val;
+            
+            if (date >= fromDateStr) {
+                result.push({ date, total: isCumulative ? runningTotal : val });
+            }
         });
+        
+        return result;
     };
 
-    // Special handling for customers (unique first-time order dates)
+    // Special handling for customers
     const newCustomersByDate = new Map<string, number>();
     firstOrderDateByCustomer.forEach(date => {
         newCustomersByDate.set(date, (newCustomersByDate.get(date) || 0) + 1);
     });
 
-    const revenueData = buildCumulative(revenueByDate);
-    const customerData = buildCumulative(newCustomersByDate);
-    const chefData = buildCumulative(activeChefsByDate);
-    const pipelineData = buildCumulative(pipelineByDate);
+    const revenueData = filterAndFormat(revenueByDate, true);
+    const customerData = filterAndFormat(newCustomersByDate, true);
+    const chefData = filterAndFormat(activeChefsByDate, true);
+    const pipelineData = filterAndFormat(pipelineByDate, true);
 
-    // Calculate Monthly Revenue (Orders only, no manual/catering revenue)
+    // Monthly Revenue (Non-cumulative, filtered by orders in range)
     const monthlyRevenueMap = new Map<string, number>();
     orders?.forEach(o => {
         const date = new Date(o.created_timestamp * 1000);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        monthlyRevenueMap.set(monthKey, (monthlyRevenueMap.get(monthKey) || 0) + Number(o.order_amount || 0));
+        const dayStr = date.toISOString().split('T')[0];
+        const fromStr = startDate ? startDate.toISOString().split('T')[0] : '0000-00-00';
+        
+        if (dayStr >= fromStr) {
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            monthlyRevenueMap.set(monthKey, (monthlyRevenueMap.get(monthKey) || 0) + Number(o.order_amount || 0));
+        }
     });
 
     const monthlyRevenueData = Array.from(monthlyRevenueMap.entries())
         .map(([date, total]) => ({ date, total }))
         .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Calculate totals at the exact endDate
+    const getFinalTotal = (data: RocketChartData[]) => data.length > 0 ? data[data.length - 1].total : 0;
 
     return {
         revenueData,
@@ -541,10 +570,10 @@ export async function getRocketData(): Promise<RocketData> {
         chefData,
         pipelineData,
         totals: {
-            revenue: revenueData[revenueData.length - 1]?.total || 0,
-            customers: customerData[customerData.length - 1]?.total || 0,
-            chefs: chefData[chefData.length - 1]?.total || 0,
-            pipeline: pipelineData[pipelineData.length - 1]?.total || 0
+            revenue: getFinalTotal(revenueData),
+            customers: getFinalTotal(customerData),
+            chefs: getFinalTotal(chefData),
+            pipeline: getFinalTotal(pipelineData)
         }
     };
 }
