@@ -459,7 +459,8 @@ export async function getRocketData(startDate?: Date, endDate?: Date): Promise<R
         .select('user_id, order_amount, created_timestamp, order_status')
         .eq('order_status', 5)
         .lte('created_timestamp', endTs)
-        .order('created_timestamp', { ascending: true });
+        .order('created_timestamp', { ascending: true })
+        .limit(10000);
 
     const { data: orders } = await ordersQuery;
 
@@ -545,12 +546,24 @@ export async function getRocketData(startDate?: Date, endDate?: Date): Promise<R
 
     // Monthly Revenue (Non-cumulative, filtered by orders in range)
     const monthlyRevenueMap = new Map<string, number>();
+    
+    // 1. Initialize all months in range with 0
+    let current = new Date(startDate || new Date(2022, 0, 1)); // Default to 2022 if no start
+    const end = endDate || new Date();
+    
+    while (current <= end) {
+        const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+        monthlyRevenueMap.set(key, 0);
+        current.setMonth(current.getMonth() + 1);
+    }
+
     orders?.forEach(o => {
         const date = new Date(o.created_timestamp * 1000);
         const dayStr = date.toISOString().split('T')[0];
         const fromStr = startDate ? startDate.toISOString().split('T')[0] : '0000-00-00';
+        const toStr = endDate ? endDate.toISOString().split('T')[0] : '9999-12-31';
         
-        if (dayStr >= fromStr) {
+        if (dayStr >= fromStr && dayStr <= toStr) {
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
             monthlyRevenueMap.set(monthKey, (monthlyRevenueMap.get(monthKey) || 0) + Number(o.order_amount || 0));
         }
