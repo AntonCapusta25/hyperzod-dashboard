@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getRocketData, type RocketData } from '../api/chartData';
-import { Rocket, TrendingUp, Users, ChefHat, Layout, ArrowUpRight, Activity, Calendar } from 'lucide-react';
+import { getDateRangeForPreset } from '../utils/dateRangeUtils';
+import type { DateRange, DateRangePreset } from '../../../types/analytics';
+import { Rocket, TrendingUp, Users, ChefHat, Layout, ArrowUpRight, Activity, Calendar, ChevronDown } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 export default function PublicRocketGraphsPage() {
-    const [data, setData] = useState<RocketData | null>(null);
+    const [allData, setAllData] = useState<RocketData | null>(null);
+    const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset | string>('last_year');
+    const [dateRange, setDateRange] = useState<DateRange>(() => getDateRangeForPreset('last_year'));
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -12,7 +16,7 @@ export default function PublicRocketGraphsPage() {
             setLoading(true);
             try {
                 const rocketData = await getRocketData();
-                setData(rocketData);
+                setAllData(rocketData);
             } catch (error) {
                 console.error('Error loading rocket data:', error);
             } finally {
@@ -21,6 +25,46 @@ export default function PublicRocketGraphsPage() {
         }
         load();
     }, []);
+
+    const filteredData = useMemo(() => {
+        if (!allData) return null;
+
+        const fromStr = dateRange.from.toISOString().split('T')[0];
+        const toStr = dateRange.to.toISOString().split('T')[0];
+
+        const filterByDate = (d: { date: string }) => d.date >= fromStr && d.date <= toStr;
+
+        const filtered = {
+            revenueData: allData.revenueData.filter(filterByDate),
+            monthlyRevenueData: allData.monthlyRevenueData.filter(filterByDate),
+            customerData: allData.customerData.filter(filterByDate),
+            chefData: allData.chefData.filter(filterByDate),
+            pipelineData: allData.pipelineData.filter(filterByDate),
+            totals: { ...allData.totals }
+        };
+
+        // Update totals to reflect the status at the end of the range
+        if (filtered.revenueData.length > 0) {
+            filtered.totals.revenue = filtered.revenueData[filtered.revenueData.length - 1].total;
+        }
+        if (filtered.customerData.length > 0) {
+            filtered.totals.customers = filtered.customerData[filtered.customerData.length - 1].total;
+        }
+        if (filtered.chefData.length > 0) {
+            filtered.totals.chefs = filtered.chefData[filtered.chefData.length - 1].total;
+        }
+        if (filtered.pipelineData.length > 0) {
+            filtered.totals.pipeline = filtered.pipelineData[filtered.pipelineData.length - 1].total;
+        }
+
+        return filtered;
+    }, [allData, dateRange]);
+
+    const handlePresetChange = (preset: DateRangePreset) => {
+        setDateRangePreset(preset);
+        const newRange = getDateRangeForPreset(preset);
+        setDateRange(newRange);
+    };
 
     const CustomTooltip = ({ active, payload, label, prefix = '' }: any) => {
         if (active && payload && payload.length) {
@@ -49,20 +93,42 @@ export default function PublicRocketGraphsPage() {
         );
     }
 
-    if (!data) return null;
+    if (!filteredData) return null;
 
     return (
         <div className="min-h-screen bg-[#050510] text-white selection:bg-blue-500/30">
             {/* Nav */}
             <nav className="border-b border-white/5 bg-black/50 backdrop-blur-md sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                            <Rocket className="w-5 h-5 text-white" />
+                    <div className="flex items-center gap-6">
+                        {/* Period Selector */}
+                        <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 hover:bg-white/10 transition-all cursor-pointer group">
+                            <Calendar className="w-4 h-4 text-blue-400" />
+                            <select
+                                value={dateRangePreset as string}
+                                onChange={(e) => handlePresetChange(e.target.value as DateRangePreset)}
+                                className="bg-transparent border-none font-bold text-sm text-white/70 focus:ring-0 cursor-pointer p-0 pr-8 appearance-none"
+                                style={{ WebkitAppearance: 'none' }}
+                            >
+                                <option value="this_week" className="bg-[#0a0a1a]">This Week</option>
+                                <option value="last_week" className="bg-[#0a0a1a]">Last Week</option>
+                                <option value="last_month" className="bg-[#0a0a1a]">Last Month</option>
+                                <option value="last_3_months" className="bg-[#0a0a1a]">Last 3 Months</option>
+                                <option value="last_year" className="bg-[#0a0a1a]">Last Year</option>
+                                <option value="all_time" className="bg-[#0a0a1a]">All Time</option>
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-white/30 -ml-6 pointer-events-none group-hover:text-white/50 transition-colors" />
                         </div>
-                        <span className="text-xl font-black tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
-                            ROCKET<span className="text-blue-500">GRAPHS</span>
-                        </span>
+
+                        <div className="hidden sm:block w-px h-6 bg-white/10"></div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                <Rocket className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-xl font-black tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
+                                ROCKET<span className="text-blue-500">GRAPHS</span>
+                            </span>
+                        </div>
                     </div>
                 </div>
             </nav>
@@ -93,7 +159,7 @@ export default function PublicRocketGraphsPage() {
                             <ArrowUpRight className="w-5 h-5 text-emerald-400 opacity-0 group-hover:opacity-100 transition-all" />
                         </div>
                         <div className="text-gray-400 text-sm font-bold uppercase tracking-widest mb-1">Total Revenue</div>
-                        <div className="text-3xl font-black">€{data.totals.revenue.toLocaleString()}</div>
+                        <div className="text-3xl font-black">€{filteredData.totals.revenue.toLocaleString()}</div>
                     </div>
 
                     <div className="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition-colors group">
@@ -104,7 +170,7 @@ export default function PublicRocketGraphsPage() {
                             <ArrowUpRight className="w-5 h-5 text-blue-400 opacity-0 group-hover:opacity-100 transition-all" />
                         </div>
                         <div className="text-gray-400 text-sm font-bold uppercase tracking-widest mb-1">Total Customers</div>
-                        <div className="text-3xl font-black">{data.totals.customers.toLocaleString()}</div>
+                        <div className="text-3xl font-black">{filteredData.totals.customers.toLocaleString()}</div>
                     </div>
 
                     <div className="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition-colors group">
@@ -115,7 +181,7 @@ export default function PublicRocketGraphsPage() {
                             <ArrowUpRight className="w-5 h-5 text-purple-400 opacity-0 group-hover:opacity-100 transition-all" />
                         </div>
                         <div className="text-gray-400 text-sm font-bold uppercase tracking-widest mb-1">Active Chefs</div>
-                        <div className="text-3xl font-black">{data.totals.chefs.toLocaleString()}</div>
+                        <div className="text-3xl font-black">{filteredData.totals.chefs.toLocaleString()}</div>
                     </div>
 
                     <div className="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition-colors group">
@@ -126,7 +192,7 @@ export default function PublicRocketGraphsPage() {
                             <ArrowUpRight className="w-5 h-5 text-orange-400 opacity-0 group-hover:opacity-100 transition-all" />
                         </div>
                         <div className="text-gray-400 text-sm font-bold uppercase tracking-widest mb-1">Pipeline Chefs</div>
-                        <div className="text-3xl font-black">{data.totals.pipeline.toLocaleString()}</div>
+                        <div className="text-3xl font-black">{filteredData.totals.pipeline.toLocaleString()}</div>
                     </div>
                 </div>
 
@@ -140,7 +206,7 @@ export default function PublicRocketGraphsPage() {
                         </h3>
                         <div className="h-[400px] w-full mt-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={data.monthlyRevenueData}>
+                                <BarChart data={filteredData.monthlyRevenueData}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                                     <XAxis 
                                         dataKey="date" 
@@ -169,7 +235,7 @@ export default function PublicRocketGraphsPage() {
                         </h3>
                         <div className="h-[400px] w-full mt-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data.revenueData}>
+                                <AreaChart data={filteredData.revenueData}>
                                     <defs>
                                         <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
@@ -208,7 +274,7 @@ export default function PublicRocketGraphsPage() {
                         </h3>
                         <div className="h-[400px] w-full mt-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data.customerData}>
+                                <AreaChart data={filteredData.customerData}>
                                     <defs>
                                         <linearGradient id="colorCustomers" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
@@ -247,7 +313,7 @@ export default function PublicRocketGraphsPage() {
                         </h3>
                         <div className="h-[400px] w-full mt-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data.chefData}>
+                                <AreaChart data={filteredData.chefData}>
                                     <defs>
                                         <linearGradient id="colorChefs" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
@@ -286,7 +352,7 @@ export default function PublicRocketGraphsPage() {
                         </h3>
                         <div className="h-[400px] w-full mt-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data.pipelineData}>
+                                <AreaChart data={filteredData.pipelineData}>
                                     <defs>
                                         <linearGradient id="colorPipeline" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.3} />

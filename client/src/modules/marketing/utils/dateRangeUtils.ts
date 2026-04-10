@@ -53,6 +53,13 @@ export function getDateRangeForPreset(preset: DateRangePreset): DateRange {
             return { from, to, preset };
         }
 
+        case 'all_time': {
+            const from = new Date(2020, 0, 1); // Platform start
+            const to = new Date(today);
+            to.setHours(23, 59, 59, 999);
+            return { from, to, preset };
+        }
+
         case 'custom':
         default:
             return { from: today, to: today, preset: 'custom' };
@@ -85,6 +92,7 @@ export function getPresetLabel(preset: DateRangePreset): string {
         case 'last_month': return 'Last 30 Days';
         case 'last_3_months': return 'Last 3 Months';
         case 'last_year': return 'Last Year';
+        case 'all_time': return 'All Time';
         case 'custom': return 'Custom Range';
         default: return preset;
     }
