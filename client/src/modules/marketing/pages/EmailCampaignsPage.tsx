@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import CampaignsPage from './CampaignsPage';
 import TemplatesPage from './TemplatesPage';
 import SegmentsPage from './SegmentsPage';
+import AutomationsPage from './AutomationsPage';
 
 export default function EmailCampaignsPage() {
     const location = useLocation();
@@ -12,7 +13,9 @@ export default function EmailCampaignsPage() {
         ? 'templates'
         : location.pathname.includes('/segments')
             ? 'segments'
-            : 'campaigns';
+            : location.pathname.includes('/automations')
+                ? 'automations'
+                : 'campaigns';
 
     return (
         <div>
@@ -46,6 +49,15 @@ export default function EmailCampaignsPage() {
                     >
                         Segments
                     </button>
+                    <button
+                        onClick={() => navigate('/dashboard/campaigns/automations')}
+                        className={`${activeSubTab === 'automations'
+                            ? 'border-blue-500 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                    >
+                        Automations
+                    </button>
                 </nav>
             </div>
 
@@ -53,6 +65,7 @@ export default function EmailCampaignsPage() {
             {activeSubTab === 'campaigns' && <CampaignsPage />}
             {activeSubTab === 'templates' && <TemplatesPage />}
             {activeSubTab === 'segments' && <SegmentsPage />}
+            {activeSubTab === 'automations' && <AutomationsPage />}
         </div>
     );
 }

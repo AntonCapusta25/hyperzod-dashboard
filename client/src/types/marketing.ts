@@ -261,3 +261,45 @@ export interface CampaignFilters {
     scheduled_after?: string;
     scheduled_before?: string;
 }
+
+// =====================================================
+// AUTOMATION TYPES
+// =====================================================
+
+export interface Automation {
+    id: string;
+    name: string;
+    description?: string;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+    steps?: AutomationStep[];
+    enrollments_count?: number;
+}
+
+export type DelayUnit = 'hours' | 'days';
+
+export interface AutomationStep {
+    id: string;
+    automation_id: string;
+    template_id: string;
+    step_order: number;
+    delay_value: number;
+    delay_unit: DelayUnit;
+    subject_override?: string;
+    created_at: string;
+    updated_at: string;
+    template?: EmailTemplate;
+}
+
+export interface AutomationEnrollment {
+    id: string;
+    client_id: string;
+    automation_id: string;
+    current_step_order: number;
+    status: 'active' | 'completed' | 'cancelled';
+    next_execution_at?: string;
+    enrolled_at: string;
+    updated_at: string;
+}
+
