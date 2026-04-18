@@ -61,6 +61,7 @@ export default function AutomationsPage() {
     };
 
     const handleDeleteStep = async (stepId: string) => {
+        if (!selectedAutomation) return;
         if (!confirm('Are you sure you want to delete this step?')) return;
         try {
             await deleteAutomationStep(stepId);
