@@ -26,7 +26,7 @@ serve(async (req: any) => {
         }
 
         // Helper to send via SendGrid REST API
-        const sendEmail = async ({ to, subject, html, from_name = 'Hyperzod', from_email = 'noreply@hyperzod.com' }: { to: string, subject: string, html: string, from_name?: string, from_email?: string }) => {
+        const sendEmail = async ({ to, subject, html, from_name = 'Homemade', from_email = 'Chefs@homemademeals.net' }: { to: string, subject: string, html: string, from_name?: string, from_email?: string }) => {
             const body: any = {
                 personalizations: [{ to: [{ email: to }] }],
                 from: { email: from_email, name: from_name },
@@ -126,8 +126,8 @@ serve(async (req: any) => {
                     to: client.email,
                     subject,
                     html,
-                    from_name: 'Hyperzod', // can be customized in automation table later
-                    from_email: 'noreply@hyperzod.com'
+                    from_name: 'Homemade', // can be customized in automation table later
+                    from_email: 'Chefs@homemademeals.net'
                 })
 
                 sentCount++
