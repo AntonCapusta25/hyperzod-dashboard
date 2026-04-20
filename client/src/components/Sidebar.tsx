@@ -185,7 +185,7 @@ export default function Sidebar() {
                         {isCollapsed ? (
                             <ChefHat className="w-8 h-8 text-blue-500" />
                         ) : (
-                            <h1 className="text-xl font-bold">Hyperzod CRM</h1>
+                            <h1 className="text-xl font-bold">Hyperzod SECURITY TEST</h1>
                         )}
                     </div>
 
