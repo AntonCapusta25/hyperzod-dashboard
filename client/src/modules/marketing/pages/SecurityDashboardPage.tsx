@@ -1,33 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    ShieldAlert, 
-    Users, 
-    Search, 
-    Filter, 
-    CheckCircle, 
-    XCircle, 
-    History, 
-    Zap,
-    ExternalLink,
+import {
+    ShieldAlert,
+    CheckCircle,
+    XCircle,
     AlertTriangle,
-    Eye,
-    TrendingDown,
-    Plus,
     Trash2
 } from 'lucide-react';
-import { 
-    fetchBypassFlags, 
-    updateBypassFlagStatus, 
+import {
+    fetchBypassFlags,
+    updateBypassFlagStatus,
     fetchAtRiskCustomers,
     fetchSecurityExceptions,
     addSecurityException,
     removeSecurityException
 } from '../api/security';
-import type { 
-    BypassFlag, 
-    ChurnAnalysisItem, 
-    BypassFlagStatus, 
-    SecurityException 
+import type {
+    BypassFlag,
+    ChurnAnalysisItem,
+    BypassFlagStatus,
+    SecurityException
 } from '../../../types/marketing';
 
 const SecurityDashboardPage: React.FC = () => {
@@ -74,7 +65,7 @@ const SecurityDashboardPage: React.FC = () => {
 
     const handleAddException = async (flag: BypassFlag) => {
         if (!window.confirm(`Are you sure you want to permanently ignore security events for this customer/chef pair?`)) return;
-        
+
         try {
             await addSecurityException({
                 user_id: flag.user_id,
@@ -107,19 +98,19 @@ const SecurityDashboardPage: React.FC = () => {
                     <p className="text-gray-500 mt-1">Manage platform integrity and customer churn risk.</p>
                 </div>
                 <div className="flex gap-2 p-1 bg-gray-100 rounded-xl self-start">
-                    <button 
+                    <button
                         onClick={() => setActiveTab('security')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'security' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         Security Alerts
                     </button>
-                    <button 
+                    <button
                         onClick={() => setActiveTab('retention')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'retention' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         Churn Risk
                     </button>
-                    <button 
+                    <button
                         onClick={() => setActiveTab('exceptions')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'exceptions' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
@@ -176,25 +167,24 @@ const SecurityDashboardPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium uppercase ${
-                                                flag.status === 'pending' ? 'bg-amber-50 text-amber-700' :
-                                                flag.status === 'confirmed' ? 'bg-red-50 text-red-700' :
-                                                flag.status === 'false_positive' ? 'bg-blue-50 text-blue-700' :
-                                                'bg-green-50 text-green-700'
-                                            }`}>
+                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium uppercase ${flag.status === 'pending' ? 'bg-amber-50 text-amber-700' :
+                                                    flag.status === 'confirmed' ? 'bg-red-50 text-red-700' :
+                                                        flag.status === 'false_positive' ? 'bg-blue-50 text-blue-700' :
+                                                            'bg-green-50 text-green-700'
+                                                }`}>
                                                 {flag.status}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right whitespace-nowrap">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button 
+                                                <button
                                                     onClick={() => handleStatusUpdate(flag.id, 'confirmed')}
                                                     className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                     title="Mark as Confirmed"
                                                 >
                                                     <CheckCircle className="w-4 h-4" />
                                                 </button>
-                                                <button 
+                                                <button
                                                     onClick={() => handleAddException(flag)}
                                                     className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors"
                                                     title="Add to Ignore List"
@@ -249,7 +239,7 @@ const SecurityDashboardPage: React.FC = () => {
                                             {new Date(item.p_last_order_date).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4 text-right whitespace-nowrap">
-                                            <button 
+                                            <button
                                                 className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
                                             >
                                                 Nudge
@@ -284,9 +274,9 @@ const SecurityDashboardPage: React.FC = () => {
                                     <tr key={ex.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="text-sm font-semibold text-gray-900">
-                                                {ex.user_id && ex.merchant_id ? `Pair: User ${ex.user_id} @ ${ex.merchant_id}` : 
-                                                 ex.user_id ? `Global User: ${ex.user_id}` : 
-                                                 `Global Merchant: ${ex.merchant_id}`}
+                                                {ex.user_id && ex.merchant_id ? `Pair: User ${ex.user_id} @ ${ex.merchant_id}` :
+                                                    ex.user_id ? `Global User: ${ex.user_id}` :
+                                                        `Global Merchant: ${ex.merchant_id}`}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-600 italic">
@@ -296,7 +286,7 @@ const SecurityDashboardPage: React.FC = () => {
                                             {new Date(ex.created_at).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button 
+                                            <button
                                                 onClick={() => handleRemoveException(ex.id)}
                                                 className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                             >
