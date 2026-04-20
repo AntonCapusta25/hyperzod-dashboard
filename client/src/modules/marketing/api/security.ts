@@ -10,7 +10,8 @@ import type {
  * Fetch all bypass flags
  */
 export async function fetchBypassFlags(): Promise<BypassFlag[]> {
-    const { data, error } = await supabase
+    // 1. Fetch flags and clients
+    const { data: flags, error: flagError } = await supabase
         .from('bypass_flags')
         .select(`
             *,
@@ -18,14 +19,31 @@ export async function fetchBypassFlags(): Promise<BypassFlag[]> {
         `)
         .order('created_at', { ascending: false });
 
-    if (error) {
-        throw new Error(`Failed to fetch bypass flags: ${error.message}`);
+    if (flagError) {
+        throw new Error(`Failed to fetch bypass flags: ${flagError.message}`);
     }
 
-    // Since we can't easily join on text merchant_id in Supabase without a formal FK,
-    // we'll fetch merchant names manually in the component if needed, 
-    // or just rely on the stored merchant_id for now.
-    return data || [];
+    if (!flags || flags.length === 0) return [];
+
+    // 2. Resolve merchant names for all unique merchant_ids
+    const merchantIds = [...new Set(flags.map(f => f.merchant_id))];
+    const { data: merchants, error: merchantError } = await supabase
+        .from('merchants')
+        .select('hyperzod_merchant_id, name')
+        .in('hyperzod_merchant_id', merchantIds);
+
+    if (merchantError) {
+        console.error('Failed to fetch merchant names:', merchantError);
+    }
+
+    // 3. Map merchant names back to flags
+    return flags.map(flag => {
+        const merchant = merchants?.find(m => m.hyperzod_merchant_id === flag.merchant_id);
+        return {
+            ...flag,
+            chef: merchant ? { name: merchant.name } : undefined
+        };
+    });
 }
 
 /**

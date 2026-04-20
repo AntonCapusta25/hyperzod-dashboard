@@ -321,8 +321,14 @@ export interface BypassFlag {
     updated_at: string;
     
     // Relations (populated via join)
-    client?: Client;
-    merchant_name?: string;
+    client?: {
+        full_name: string;
+        email?: string;
+        mobile?: string;
+    };
+    chef?: {
+        name: string;
+    };
 }
 
 export interface SecurityException {
