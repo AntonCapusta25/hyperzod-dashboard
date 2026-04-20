@@ -27,6 +27,11 @@ interface NavItem {
 
 const navigationItems: NavItem[] = [
     {
+        name: 'Security & Retention',
+        path: '/dashboard/security',
+        icon: ShieldAlert,
+    },
+    {
         name: 'Overview',
         path: '/dashboard/overview',
         icon: LayoutDashboard,
@@ -75,11 +80,6 @@ const navigationItems: NavItem[] = [
         name: 'Begeleiders',
         path: '/dashboard/begeleiders',
         icon: Building2,
-    },
-    {
-        name: 'Security & Retention',
-        path: '/dashboard/security',
-        icon: ShieldAlert,
     },
 ];
 
