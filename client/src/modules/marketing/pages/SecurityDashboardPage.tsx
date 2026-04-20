@@ -11,7 +11,13 @@ import {
     DollarSign,
     AlertCircle,
     MessageSquare,
-    TrendingDown
+    TrendingDown,
+    Ghost,
+    CreditCard,
+    RotateCcw,
+    Unplug,
+    Activity,
+    Globe
 } from 'lucide-react';
 import {
     fetchBypassFlags,
@@ -99,8 +105,8 @@ const SecurityDashboardPage: React.FC = () => {
                             <span className="flex items-center gap-1 font-bold text-red-600">
                                 <TrendingDown className="w-3 h-3" /> {data.drop_percentage}% drop
                             </span>
-                            <span className="opacity-60">Avg: PKR {Math.round(data.prev_avg_amount).toLocaleString()}</span>
-                            <span className="opacity-60">Last: PKR {Math.round(data.last_order_amount).toLocaleString()}</span>
+                            <span className="opacity-60">Avg: PKR {Math.round(data.previous_avg).toLocaleString()}</span>
+                            <span className="opacity-60">Last: PKR {Math.round(data.last_spent).toLocaleString()}</span>
                         </div>
                     </div>
                 );
@@ -108,10 +114,53 @@ const SecurityDashboardPage: React.FC = () => {
                 return (
                     <div className="space-y-1">
                         <p className="text-sm text-gray-700 leading-snug">
-                            High churn rate detected: <span className="font-bold text-red-600">{data.churn_rate}%</span> of customers never return.
+                            High churn rate detected: <span className="font-bold text-red-600">{data.churn_rate}</span> of customers never return.
                         </p>
                         <p className="text-xs text-gray-500 flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md w-fit">
-                            <User className="w-3 h-3 opacity-50" /> {data.one_time_customers} single-order customers out of {data.total_customers}.
+                            <User className="w-3 h-3 opacity-50" /> {data.total_customers} total unique customers analyzed.
+                        </p>
+                    </div>
+                );
+            case 'multi_account':
+                return (
+                    <div className="space-y-1">
+                        <p className="text-sm text-gray-700 leading-snug font-semibold text-red-700">
+                            🚨 High Suspicion: IP/Device Reuse detected.
+                        </p>
+                        <div className="text-[11px] grid grid-cols-2 gap-x-4 gap-y-1 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                            <div><span className="text-gray-400 font-medium">IP:</span> {data.shared_ip}</div>
+                            <div><span className="text-gray-400 font-medium">Linked IDs:</span> {data.linked_accounts}</div>
+                            <div className="col-span-2 truncate"><span className="text-gray-400 font-medium">Device:</span> {data.shared_device}</div>
+                        </div>
+                    </div>
+                );
+            case 'phantom_merchant':
+                return (
+                    <div className="space-y-1">
+                        <p className="text-sm text-gray-700 leading-snug">
+                            Inadequate behavior: <span className="font-bold text-purple-700">{data.concentration}</span> of revenue from a single customer.
+                        </p>
+                        <p className="text-xs text-gray-500 flex items-center gap-1.5 bg-purple-50 px-2 py-1 rounded-md w-fit">
+                            <Activity className="w-3 h-3 text-purple-600" /> Revenue concentration: PKR {Math.round(data.total_revenue).toLocaleString()}
+                        </p>
+                    </div>
+                );
+            case 'refund_predator':
+                return (
+                    <div className="space-y-1">
+                        <p className="text-sm text-gray-700 leading-snug font-bold text-red-600">
+                            Excessive Refund Abuse: <span className="border-b-2 border-red-200">{data.refund_rate}</span> rate.
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            {data.cancelled} cancellations out of {data.total_orders} total attempts.
+                        </p>
+                    </div>
+                );
+            case 'voucher_abuse':
+                return (
+                    <div className="space-y-1">
+                        <p className="text-sm text-gray-700 leading-snug">
+                            Inadequate behavior: Multiple distinct accounts using same voucher pattern on shared hardware.
                         </p>
                     </div>
                 );
@@ -160,12 +209,30 @@ const SecurityDashboardPage: React.FC = () => {
         }
     };
 
+    const getFlagIcon = (type: string) => {
+        switch (type) {
+            case 'multi_account':
+            case 'voucher_abuse':
+                return <Ghost className="w-5 h-5" />;
+            case 'refund_predator':
+                return <RotateCcw className="w-5 h-5" />;
+            case 'phantom_merchant':
+                return <CreditCard className="w-5 h-5" />;
+            case 'aov_crash':
+                return <TrendingDown className="w-5 h-5" />;
+            case 'contact_leak':
+                return <Unplug className="w-5 h-5" />;
+            default:
+                return <ShieldAlert className="w-5 h-5" />;
+        }
+    };
+
     return (
         <div className="space-y-6">
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                 <div>
-                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">Security & Retention Dashboard</h1>
-                    <p className="text-gray-500 mt-0.5 text-sm font-medium">Protect platform revenue and monitor customer health.</p>
+                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">Advanced Security Engine</h1>
+                    <p className="text-gray-500 mt-0.5 text-sm font-medium">Detecting systemic anomalies and inadequate behavior patterns.</p>
                 </div>
                 <div className="flex gap-1.5 p-1.5 bg-gray-50 rounded-2xl border border-gray-100 self-start">
                     <button
@@ -204,7 +271,7 @@ const SecurityDashboardPage: React.FC = () => {
                                 <tr>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Detection Event</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Entity under Review</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Analysis Evidence</th>
+                                    <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Behavior Analysis Evidence</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Status</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em] text-right">Review Actions</th>
                                 </tr>
@@ -218,8 +285,12 @@ const SecurityDashboardPage: React.FC = () => {
                                     <tr key={flag.id} className="group hover:bg-gray-50/50 transition-all duration-300">
                                         <td className="px-6 py-5 whitespace-nowrap">
                                             <div className="flex items-center gap-4">
-                                                <div className={`p-3 rounded-2xl shadow-sm ${flag.flag_type === 'contact_leak' || flag.flag_type === 'poached_customer' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
-                                                    <ShieldAlert className="w-5 h-5" />
+                                                <div className={`p-3 rounded-2xl shadow-sm ${
+                                                    ['contact_leak', 'poached_customer', 'multi_account', 'refund_predator'].includes(flag.flag_type) 
+                                                    ? 'bg-red-50 text-red-600' 
+                                                    : 'bg-amber-50 text-amber-600'
+                                                }`}>
+                                                    {getFlagIcon(flag.flag_type)}
                                                 </div>
                                                 <div>
                                                     <div className="text-sm font-black text-gray-900 uppercase tracking-tight leading-none mb-1">{flag.flag_type.replace(/_/g, ' ')}</div>
@@ -228,7 +299,17 @@ const SecurityDashboardPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-5">
-                                            {flag.client ? (
+                                            {flag.merchant_id === 'GLOBAL' ? (
+                                                <div className="flex items-center gap-3 bg-gray-100/50 p-2.5 rounded-2xl border border-gray-200/50">
+                                                    <div className="p-2 bg-gray-200/50 text-gray-600 rounded-xl shadow-sm">
+                                                        <Globe className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm text-gray-950 font-extrabold leading-none mb-1">Global Audit</div>
+                                                        <div className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Platform-wide Impact</div>
+                                                    </div>
+                                                </div>
+                                            ) : flag.client ? (
                                                 <div className="flex items-center gap-3 bg-blue-50/50 p-2.5 rounded-2xl border border-blue-100/50">
                                                     <div className="p-2 bg-blue-100/50 text-blue-600 rounded-xl shadow-sm">
                                                         <User className="w-4 h-4" />

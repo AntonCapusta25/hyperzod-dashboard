@@ -307,7 +307,7 @@ export interface AutomationEnrollment {
 // SECURITY & RETENTION TYPES
 // =====================================================
 
-export type BypassFlagType = 'poached_customer' | 'high_churn_chef' | 'suspicious_cart_value' | 'contact_leak' | 'aov_crash';
+export type BypassFlagType = 'poached_customer' | 'high_churn_chef' | 'suspicious_cart_value' | 'contact_leak' | 'aov_crash' | 'phantom_merchant' | 'voucher_abuse' | 'refund_predator' | 'multi_account';
 export type BypassFlagStatus = 'pending' | 'reviewed' | 'false_positive' | 'confirmed';
 
 export interface BypassFlag {

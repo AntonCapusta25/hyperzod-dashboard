@@ -101,6 +101,55 @@ serve(async (req: any) => {
             }
         }))
 
+        // E. Multi-Account Patterns (IP/Device Reuse)
+        const { data: multies } = await supabaseAdmin.rpc('detect_multi_account')
+        multies?.forEach((m: any) => violations.push({
+            type: 'MULTI_ACCOUNT',
+            chef_id: 'GLOBAL', 
+            chef_name: 'Platform-wide',
+            user_id: m.user_ids[0], // Primary suspect
+            event_at: m.last_event,
+            severity: 'high',
+            evidence: {
+                shared_ip: m.p_ip,
+                shared_device: m.p_device,
+                linked_accounts: m.user_ids.length,
+                total_orders: m.order_count
+            }
+        }))
+
+        // F. Phantom Merchants (Self-Ordering)
+        const { data: phantoms } = await supabaseAdmin.rpc('detect_phantom_merchants')
+        phantoms?.forEach((ph: any) => violations.push({
+            type: 'PHANTOM_MERCHANT',
+            chef_id: ph.p_merchant_id,
+            chef_name: ph.p_merchant_name,
+            user_id: null,
+            event_at: new Date().toISOString(),
+            severity: 'high',
+            evidence: {
+                total_revenue: ph.total_revenue,
+                concentration: `${ph.top_customer_share}% share from one customer`,
+                unique_customers: ph.customer_count
+            }
+        }))
+
+        // G. Refund Predators
+        const { data: predators } = await supabaseAdmin.rpc('detect_refund_predators')
+        predators?.forEach((pr: any) => violations.push({
+            type: 'REFUND_PREDATOR',
+            chef_id: 'GLOBAL',
+            chef_name: 'Platform-wide',
+            user_id: pr.p_user_id,
+            event_at: new Date().toISOString(),
+            severity: 'high',
+            evidence: {
+                total_orders: pr.total_orders,
+                cancelled: pr.cancelled_orders,
+                refund_rate: `${pr.refund_rate}%`
+            }
+        }))
+
         // ============================================
         // 1.5 Filter Violations against Security Exceptions
         // ============================================

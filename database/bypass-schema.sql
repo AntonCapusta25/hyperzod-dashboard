@@ -1,11 +1,11 @@
 -- =====================================================
--- BYPASS DETECTION SYSTEM - DATABASE SCHEMA (RESILLIENT V2)
+-- BYPASS DETECTION SYSTEM - DATABASE SCHEMA (RESILLIENT V3 - ADVANCED ANOMALIES)
 -- =====================================================
 
 -- 1. Bypass Flags Table
 CREATE TABLE IF NOT EXISTS public.bypass_flags (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  flag_type text NOT NULL CHECK (flag_type IN ('poached_customer', 'high_churn_chef', 'suspicious_cart_value', 'contact_leak', 'aov_crash')),
+  flag_type text NOT NULL, -- Constraint updated below
   user_id integer REFERENCES public.clients(hyperzod_id) ON DELETE CASCADE,
   merchant_id text NOT NULL,
   evidence_data jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -13,6 +13,21 @@ CREATE TABLE IF NOT EXISTS public.bypass_flags (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now()
 );
+
+-- Update Check Constraint for all supported anomaly types
+ALTER TABLE public.bypass_flags DROP CONSTRAINT IF EXISTS bypass_flags_flag_type_check;
+ALTER TABLE public.bypass_flags ADD CONSTRAINT bypass_flags_flag_type_check 
+  CHECK (flag_type IN (
+    'poached_customer', 
+    'high_churn_chef', 
+    'suspicious_cart_value', 
+    'contact_leak', 
+    'aov_crash',
+    'phantom_merchant',
+    'voucher_abuse',
+    'refund_predator',
+    'multi_account'
+  ));
 
 -- Unique index to prevent duplicates
 DROP INDEX IF EXISTS idx_bypass_flags_unique;
@@ -36,7 +51,6 @@ CREATE POLICY "Service role can orchestrate bypass flags" ON public.bypass_flags
 
 
 -- 2. Security Exceptions Table
--- Entities to ignore in automated scanning
 CREATE TABLE IF NOT EXISTS public.security_exceptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id integer REFERENCES public.clients(hyperzod_id) ON DELETE CASCADE,
@@ -46,11 +60,9 @@ CREATE TABLE IF NOT EXISTS public.security_exceptions (
   updated_at timestamp with time zone DEFAULT now()
 );
 
--- Unique constraint: an exception for a client, a merchant, or a specific pair
 CREATE UNIQUE INDEX IF NOT EXISTS idx_security_exceptions_unique 
 ON public.security_exceptions (COALESCE(user_id, -1), COALESCE(merchant_id, 'ALL'));
 
--- Enable RLS
 ALTER TABLE public.security_exceptions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Admins full access to security_exceptions" ON public.security_exceptions;
@@ -62,10 +74,9 @@ CREATE POLICY "Service role can read exceptions" ON public.security_exceptions F
 
 
 -- =====================================================
--- 3. Analysis Functions (Improved RPCs for Phase 2)
+-- 3. Analysis Functions (Standard Detections)
 -- =====================================================
 
--- Drop existing functions first to allow changing return types
 DROP FUNCTION IF EXISTS detect_poached_customers();
 DROP FUNCTION IF EXISTS detect_high_churn_chefs();
 DROP FUNCTION IF EXISTS detect_contact_leaks();
@@ -99,7 +110,6 @@ BEGIN
     WHERE c.last_order_date < (now() - (p_days_threshold || ' days')::interval)
       AND c.email_unsubscribed = false
       AND c.total_orders > 0
-      -- Exclude users already in the exceptions list (global ignore)
       AND NOT EXISTS (
         SELECT 1 FROM public.security_exceptions se 
         WHERE se.user_id = c.hyperzod_id AND se.merchant_id IS NULL
@@ -152,7 +162,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Detect High Churn Chefs
 CREATE OR REPLACE FUNCTION detect_high_churn_chefs()
 RETURNS TABLE (
@@ -200,7 +209,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- Detect Contact Leaks
 CREATE OR REPLACE FUNCTION detect_contact_leaks()
 RETURNS TABLE (
@@ -228,86 +236,112 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
--- Detect AOV Crash
-CREATE OR REPLACE FUNCTION detect_aov_crash()
+-- =====================================================
+-- 4. Advanced Anomaly Detection (Highly Suspicious Patterns)
+-- =====================================================
+
+DROP FUNCTION IF EXISTS detect_multi_account();
+DROP FUNCTION IF EXISTS detect_phantom_merchants();
+DROP FUNCTION IF EXISTS detect_refund_predators();
+
+-- [ADVANCED] Detect Multi-Accounting (IP/Device Reuse)
+CREATE OR REPLACE FUNCTION detect_multi_account()
 RETURNS TABLE (
-    p_user_id integer,
-    p_merchant_id text,
-    p_merchant_name text,
-    prev_avg_amount numeric,
-    last_order_amount numeric,
-    drop_percentage numeric,
-    event_at timestamp with time zone
+    p_ip text,
+    p_device text,
+    user_ids integer[],
+    order_count bigint,
+    last_event timestamp with time zone
 ) AS $$
 BEGIN
     RETURN QUERY
-    WITH user_merchant_history AS (
+    SELECT 
+        o.ip,
+        o.device,
+        array_agg(DISTINCT o.user_id) as u_ids,
+        COUNT(*) as o_count,
+        MAX(to_timestamp(o.created_timestamp)) as l_event
+    FROM public.orders o
+    WHERE o.ip IS NOT NULL AND o.user_id IS NOT NULL
+    GROUP BY o.ip, o.device
+    HAVING COUNT(DISTINCT o.user_id) >= 2;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- [ADVANCED] Detect Phantom Merchants (Revenue Concentration)
+CREATE OR REPLACE FUNCTION detect_phantom_merchants()
+RETURNS TABLE (
+    p_merchant_id text,
+    p_merchant_name text,
+    total_revenue numeric,
+    top_customer_share numeric,
+    customer_count bigint
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH merchant_stats AS (
         SELECT 
-            user_id, 
-            merchant_id, 
-            order_amount,
-            to_timestamp(created_timestamp) as o_time,
-            ROW_NUMBER() OVER(PARTITION BY user_id, merchant_id ORDER BY created_timestamp DESC) as order_rank,
-            AVG(order_amount) OVER(PARTITION BY user_id, merchant_id) as overall_avg
+            merchant_id,
+            SUM(order_amount) as total_amt,
+            COUNT(DISTINCT user_id) as c_count
         FROM public.orders
-        WHERE order_status = 5 AND user_id IS NOT NULL
+        WHERE order_status = 5
+        GROUP BY merchant_id
     ),
-    last_orders AS (
-        SELECT * FROM user_merchant_history WHERE order_rank = 1
-    ),
-    previous_stats AS (
+    top_customer AS (
         SELECT 
-            user_id, 
-            merchant_id, 
-            AVG(order_amount) as h_avg,
-            COUNT(*) as h_count
-        FROM user_merchant_history
-        WHERE order_rank > 1
-        GROUP BY user_id, merchant_id
+            merchant_id,
+            user_id,
+            SUM(order_amount) as customer_amt,
+            ROW_NUMBER() OVER(PARTITION BY merchant_id ORDER BY SUM(order_amount) DESC) as rank
+        FROM public.orders
+        WHERE order_status = 5
+        GROUP BY merchant_id, user_id
     )
     SELECT 
-        l.user_id, 
-        l.merchant_id, 
-        COALESCE(m.name, l.merchant_id) as p_merchant_name,
-        p.h_avg::numeric,
-        l.order_amount::numeric,
-        ROUND((1 - (l.order_amount / p.h_avg)) * 100, 2) as drop_percentage,
-        l.o_time
-    FROM last_orders l
-    JOIN previous_stats p ON l.user_id = p.user_id AND l.merchant_id = p.merchant_id
-    LEFT JOIN public.merchants m ON (l.merchant_id = m.hyperzod_merchant_id OR l.merchant_id = m.merchant_id)
-    WHERE p.h_count >= 2      
-      AND p.h_avg >= 15       
-      AND l.order_amount <= (p.h_avg * 0.25) 
-      AND l.o_time > (now() - INTERVAL '1 day');
+        ms.merchant_id,
+        COALESCE(m.name, ms.merchant_id) as p_merchant_name,
+        ms.total_amt::numeric,
+        ROUND((tc.customer_amt / ms.total_amt) * 100, 2) as share,
+        ms.c_count
+    FROM merchant_stats ms
+    JOIN top_customer tc ON ms.merchant_id = tc.merchant_id
+    LEFT JOIN public.merchants m ON (ms.merchant_id = m.hyperzod_merchant_id OR ms.merchant_id = m.merchant_id)
+    WHERE tc.rank = 1 
+      AND ms.c_count >= 1
+      AND (tc.customer_amt / ms.total_amt) >= 0.80 -- 80% revenue from one customer
+      AND ms.total_amt > 50; -- Minimum threshold to avoid noise
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- [ADVANCED] Detect Refund Predators (High Cancellation Rate)
+CREATE OR REPLACE FUNCTION detect_refund_predators()
+RETURNS TABLE (
+    p_user_id integer,
+    total_orders bigint,
+    cancelled_orders bigint,
+    refund_rate numeric
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        o.user_id,
+        COUNT(*) as t_orders,
+        SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END) as c_orders, -- Assuming 4=Cancelled, 6=Refunded
+        ROUND((SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END)::numeric / COUNT(*)::numeric) * 100, 2) as r_rate
+    FROM public.orders o
+    WHERE o.user_id IS NOT NULL
+    GROUP BY o.user_id
+    HAVING COUNT(*) >= 3 AND (SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END)::numeric / COUNT(*)::numeric) >= 0.50;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 -- =====================================================
--- 3. Set up pg_cron execution
+-- 5. Backfill & Setup
 -- =====================================================
 
-DO $$
-BEGIN
-  -- We schedule the edge function to run every week on Sunday night at 23:30
-  PERFORM cron.schedule(
-      'analyze-bypass-behavior-job',   -- Job name
-      '30 23 * * 0',                   -- Every Sunday at 23:30 hours
-      $q$
-      SELECT
-        net.http_post(
-            url:='https://oyeqtiovqtkwduzkvomr.supabase.co/functions/v1/analyze-bypass-behavior',
-            headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95ZXF0aW92cXRrd2R1emt2b21yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODMxOTI3MiwiZXhwIjoyMDgzODk1MjcyfQ.LNYzKdJUYYdCOvMqKdHwHPLxYsGBbRQcOjMPUxPQqnI"}'::jsonb,
-            body:='{}'::jsonb
-        ) as request_id;
-      $q$
-  );
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
-
--- 4. Backfill Initial Client Statistics
+-- Backfill Initial Client Statistics
 UPDATE public.clients c
 SET 
   last_order_date = stats.last_order,
@@ -324,3 +358,22 @@ FROM (
   GROUP BY user_id
 ) AS stats
 WHERE c.hyperzod_id = stats.user_id;
+
+-- Ensure pg_cron job is set (Standard weekly Sunday analysis)
+DO $$
+BEGIN
+  PERFORM cron.schedule(
+      'analyze-bypass-behavior-job',
+      '30 23 * * 0',
+      $q$
+      SELECT
+        net.http_post(
+            url:='https://oyeqtiovqtkwduzkvomr.supabase.co/functions/v1/analyze-bypass-behavior',
+            headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95ZXF0aW92cXRrd2R1emt2b21yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODMxOTI3MiwiZXhwIjoyMDgzODk1MjcyfQ.LNYzKdJUYYdCOvMqKdHwHPLxYsGBbRQcOjMPUxPQqnI"}'::jsonb,
+            body:='{}'::jsonb
+        ) as request_id;
+      $q$
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;

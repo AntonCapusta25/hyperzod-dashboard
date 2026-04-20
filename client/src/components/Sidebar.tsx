@@ -25,61 +25,15 @@ interface NavItem {
     children?: NavItem[];
 }
 
-const navigationItems: NavItem[] = [
-    {
-        name: 'Security & Retention',
-        path: '/dashboard/security',
-        icon: ShieldAlert,
-    },
-    {
-        name: 'Overview',
-        path: '/dashboard/overview',
-        icon: LayoutDashboard,
-    },
-    {
-        name: 'Chefs',
-        path: '/dashboard/chefs',
-        icon: ChefHat,
-        children: [
-            { name: 'List', path: '/dashboard/chefs/list', icon: ChefHat },
-            { name: 'Map', path: '/dashboard/chefs/map', icon: ChefHat },
-        ],
-    },
-    {
-        name: 'Clients',
-        path: '/dashboard/clients',
-        icon: Users,
-    },
-    {
-        name: 'Orders',
-        path: '/dashboard/orders',
-        icon: Package,
-    },
-    {
-        name: 'Email Campaigns',
-        path: '/dashboard/campaigns',
-        icon: Mail,
-        children: [
-            { name: 'Campaigns', path: '/dashboard/campaigns/list', icon: Mail },
-            { name: 'Templates', path: '/dashboard/campaigns/templates', icon: Mail },
-            { name: 'Segments', path: '/dashboard/campaigns/segments', icon: Mail },
-        ],
-    },
-    {
-        name: 'KPIs',
-        path: '/dashboard/kpis',
-        icon: BarChart3,
-        children: [
-            { name: 'All', path: '/dashboard/kpis/all', icon: BarChart3 },
-            { name: 'Amsterdam', path: '/dashboard/kpis/amsterdam', icon: BarChart3 },
-            { name: 'Enschede', path: '/dashboard/kpis/enschede', icon: BarChart3 },
-            { name: 'Utrecht', path: '/dashboard/kpis/utrecht', icon: BarChart3 },
-        ],
-    },
     {
         name: 'Begeleiders',
         path: '/dashboard/begeleiders',
         icon: Building2,
+    },
+    {
+        name: 'Security & Retention',
+        path: '/dashboard/security',
+        icon: ShieldAlert,
     },
 ];
 
