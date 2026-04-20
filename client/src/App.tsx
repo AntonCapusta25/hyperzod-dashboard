@@ -15,6 +15,7 @@ import BegeleidersDashboard from './modules/marketing/pages/BegeleidersDashboard
 import PublicAnalyticsPage from './modules/marketing/pages/PublicAnalyticsPage';
 import PublicChefsPage from './modules/marketing/pages/PublicChefsPage';
 import PublicRocketGraphsPage from './modules/marketing/pages/PublicRocketGraphsPage';
+import SecurityDashboardPage from './modules/marketing/pages/SecurityDashboardPage';
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
                   <Route path="campaigns/*" element={<EmailCampaignsPage />} />
                   <Route path="kpis/*" element={<KPIsPage />} />
                   <Route path="begeleiders" element={<BegeleidersDashboard />} />
+                  <Route path="security" element={<SecurityDashboardPage />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>

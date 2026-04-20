@@ -303,3 +303,44 @@ export interface AutomationEnrollment {
     updated_at: string;
 }
 
+// =====================================================
+// SECURITY & RETENTION TYPES
+// =====================================================
+
+export type BypassFlagType = 'poached_customer' | 'high_churn_chef' | 'suspicious_cart_value' | 'contact_leak' | 'aov_crash';
+export type BypassFlagStatus = 'pending' | 'reviewed' | 'false_positive' | 'confirmed';
+
+export interface BypassFlag {
+    id: string;
+    flag_type: BypassFlagType;
+    user_id?: number;
+    merchant_id: string;
+    evidence_data: Record<string, any>;
+    status: BypassFlagStatus;
+    created_at: string;
+    updated_at: string;
+    
+    // Relations (populated via join)
+    client?: Client;
+    merchant_name?: string;
+}
+
+export interface SecurityException {
+    id: string;
+    user_id?: number;
+    merchant_id?: string;
+    reason?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ChurnAnalysisItem {
+    p_user_id: number;
+    p_full_name: string;
+    p_email?: string;
+    p_mobile?: string;
+    p_last_order_date: string;
+    p_total_spent: number;
+    p_total_orders: number;
+    p_days_since_last: number;
+}

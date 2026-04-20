@@ -14,6 +14,7 @@ import {
     LogOut,
     UserCircle,
     Building2,
+    ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../modules/auth/contexts/AuthContext';
 
@@ -74,6 +75,11 @@ const navigationItems: NavItem[] = [
         name: 'Begeleiders',
         path: '/dashboard/begeleiders',
         icon: Building2,
+    },
+    {
+        name: 'Security & Retention',
+        path: '/dashboard/security',
+        icon: ShieldAlert,
     },
 ];
 
