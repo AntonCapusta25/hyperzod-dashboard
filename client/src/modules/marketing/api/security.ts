@@ -108,12 +108,10 @@ export async function addSecurityException(exception: Partial<SecurityException>
 }
 
 /**
- * Manually trigger the behavioral analysis edge function
+ * Manually trigger the behavioral analysis audit
  */
 export async function triggerAnalysis(): Promise<{ success: boolean; count?: number }> {
-    const { data, error } = await supabase.functions.invoke('analyze-bypass-behavior', {
-        body: {}
-    });
+    const { data, error } = await supabase.rpc('run_security_audit');
 
     if (error) {
         throw new Error(error.message || 'Failed to trigger behavioral analysis.');

@@ -1,11 +1,11 @@
 -- =====================================================
--- BYPASS DETECTION SYSTEM - DATABASE SCHEMA (RESILLIENT V3 - ADVANCED ANOMALIES)
+-- BYPASS DETECTION SYSTEM - DATABASE SCHEMA (RESILLIENT V4 - ORCHESTRATION)
 -- =====================================================
 
 -- 1. Bypass Flags Table
 CREATE TABLE IF NOT EXISTS public.bypass_flags (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  flag_type text NOT NULL, -- Constraint updated below
+  flag_type text NOT NULL,
   user_id integer REFERENCES public.clients(hyperzod_id) ON DELETE CASCADE,
   merchant_id text NOT NULL,
   evidence_data jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -83,7 +83,7 @@ DROP FUNCTION IF EXISTS detect_contact_leaks();
 DROP FUNCTION IF EXISTS detect_aov_crash();
 DROP FUNCTION IF EXISTS detect_platform_churn();
 
--- [NEW] Detect Platform Churn (Lost Customers)
+-- Detect Platform Churn (Lost Customers)
 CREATE OR REPLACE FUNCTION detect_platform_churn(p_days_threshold int DEFAULT 1)
 RETURNS TABLE (
     p_user_id integer,
@@ -210,7 +210,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Detect Contact Leaks
-CREATE OR REPLACE FUNCTION detect_contact_leaks()
+CREATE OR REPLACE REPLACE FUNCTION detect_contact_leaks()
 RETURNS TABLE (
     p_user_id integer,
     p_merchant_id text,
@@ -244,7 +244,7 @@ DROP FUNCTION IF EXISTS detect_multi_account();
 DROP FUNCTION IF EXISTS detect_phantom_merchants();
 DROP FUNCTION IF EXISTS detect_refund_predators();
 
--- [ADVANCED] Detect Multi-Accounting (IP/Device Reuse)
+-- Detect Multi-Accounting (IP/Device Reuse)
 CREATE OR REPLACE FUNCTION detect_multi_account()
 RETURNS TABLE (
     p_ip text,
@@ -268,7 +268,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- [ADVANCED] Detect Phantom Merchants (Revenue Concentration)
+-- Detect Phantom Merchants (Revenue Concentration)
 CREATE OR REPLACE FUNCTION detect_phantom_merchants()
 RETURNS TABLE (
     p_merchant_id text,
@@ -314,7 +314,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- [ADVANCED] Detect Refund Predators (High Cancellation Rate)
+-- Detect Refund Predators (High Cancellation Rate)
 CREATE OR REPLACE FUNCTION detect_refund_predators()
 RETURNS TABLE (
     p_user_id integer,
@@ -327,7 +327,7 @@ BEGIN
     SELECT 
         o.user_id,
         COUNT(*) as t_orders,
-        SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END) as c_orders, -- Assuming 4=Cancelled, 6=Refunded
+        SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END) as c_orders,
         ROUND((SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END)::numeric / COUNT(*)::numeric) * 100, 2) as r_rate
     FROM public.orders o
     WHERE o.user_id IS NOT NULL
@@ -338,7 +338,74 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 -- =====================================================
--- 5. Backfill & Setup
+-- 5. AUDIT ORCHESTRATOR (RPC-ONLY MODE)
+-- =====================================================
+
+DROP FUNCTION IF EXISTS run_security_audit();
+
+CREATE OR REPLACE FUNCTION run_security_audit()
+RETURNS json AS $$
+DECLARE
+    v_count int := 0;
+    r record;
+BEGIN
+    -- 1. Poached Customers
+    FOR r IN SELECT * FROM detect_poached_customers() LOOP
+        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+        VALUES ('poached_customer', r.p_user_id, r.p_merchant_id, 
+               jsonb_build_object('total_orders', r.pair_orders, 'days_since_chef', r.days_since_merchant, 'days_since_platform', r.days_since_platform))
+        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+        v_count := v_count + 1;
+    END LOOP;
+
+    -- 2. Contact Leaks
+    FOR r IN SELECT * FROM detect_contact_leaks() LOOP
+        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+        VALUES ('contact_leak', r.p_user_id, r.p_merchant_id, 
+               jsonb_build_object('note', r.leaked_note, 'order_id', r.p_order_id))
+        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+        v_count := v_count + 1;
+    END LOOP;
+
+    -- 3. Multi-Account
+    FOR r IN SELECT * FROM detect_multi_account() LOOP
+        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+        VALUES ('multi_account', r.user_ids[1], 'GLOBAL', 
+               jsonb_build_object('shared_ip', r.p_ip, 'shared_device', r.p_device, 'linked_accounts', array_length(r.user_ids, 1), 'total_orders', r.order_count))
+        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+        v_count := v_count + 1;
+    END LOOP;
+
+    -- 4. Phantom Merchant
+    FOR r IN SELECT * FROM detect_phantom_merchants() LOOP
+        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+        VALUES ('phantom_merchant', NULL, r.p_merchant_id, 
+               jsonb_build_object('total_revenue', r.total_revenue, 'concentration', r.top_customer_share, 'unique_customers', r.customer_count))
+        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+        v_count := v_count + 1;
+    END LOOP;
+
+    -- 5. Refund Predators
+    FOR r IN SELECT * FROM detect_refund_predators() LOOP
+        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+        VALUES ('refund_predator', r.p_user_id, 'GLOBAL', 
+               jsonb_build_object('total_orders', r.total_orders, 'cancelled', r.cancelled_orders, 'refund_rate', r.refund_rate))
+        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+        v_count := v_count + 1;
+    END LOOP;
+
+    RETURN json_build_object('success', true, 'count', v_count);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- =====================================================
+-- 6. Backfill & Setup
 -- =====================================================
 
 -- Backfill Initial Client Statistics
@@ -359,20 +426,13 @@ FROM (
 ) AS stats
 WHERE c.hyperzod_id = stats.user_id;
 
--- Ensure pg_cron job is set (Standard weekly Sunday analysis)
+-- Ensure pg_cron job is set (Now calls the RPC directly!)
 DO $$
 BEGIN
   PERFORM cron.schedule(
-      'analyze-bypass-behavior-job',
+      'run-security-audit-cron',
       '30 23 * * 0',
-      $q$
-      SELECT
-        net.http_post(
-            url:='https://oyeqtiovqtkwduzkvomr.supabase.co/functions/v1/analyze-bypass-behavior',
-            headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95ZXF0aW92cXRrd2R1emt2b21yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODMxOTI3MiwiZXhwIjoyMDgzODk1MjcyfQ.LNYzKdJUYYdCOvMqKdHwHPLxYsGBbRQcOjMPUxPQqnI"}'::jsonb,
-            body:='{}'::jsonb
-        ) as request_id;
-      $q$
+      'SELECT public.run_security_audit()'
   );
 EXCEPTION
   WHEN duplicate_object THEN NULL;
