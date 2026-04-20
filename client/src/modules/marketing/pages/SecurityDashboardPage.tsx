@@ -17,7 +17,10 @@ import {
     RotateCcw,
     Unplug,
     Activity,
-    Globe
+    Globe,
+    Zap,
+    Search,
+    RefreshCw
 } from 'lucide-react';
 import {
     fetchBypassFlags,
@@ -25,7 +28,8 @@ import {
     fetchAtRiskCustomers,
     fetchSecurityExceptions,
     addSecurityException,
-    removeSecurityException
+    removeSecurityException,
+    triggerAnalysis
 } from '../api/security';
 import type {
     BypassFlag,
@@ -35,12 +39,13 @@ import type {
 } from '../../../types/marketing';
 
 const SecurityDashboardPage: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'security' | 'retention' | 'exceptions'>('security');
+    const [activeTab, setActiveTab] = useState<'security' | 'audit' | 'retention' | 'exceptions'>('security');
     const [flags, setFlags] = useState<BypassFlag[]>([]);
     const [atRisk, setAtRisk] = useState<ChurnAnalysisItem[]>([]);
     const [exceptions, setExceptions] = useState<SecurityException[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isScanning, setIsScanning] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -50,7 +55,7 @@ const SecurityDashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            if (activeTab === 'security') {
+            if (activeTab === 'security' || activeTab === 'audit') {
                 const data = await fetchBypassFlags();
                 setFlags(data);
             } else if (activeTab === 'retention') {
@@ -64,6 +69,20 @@ const SecurityDashboardPage: React.FC = () => {
             setError(err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleTriggerScan = async () => {
+        setIsScanning(true);
+        setError(null);
+        try {
+            const result = await triggerAnalysis();
+            alert(`Analysis complete! Identified ${result.count} anomalies.`);
+            loadData();
+        } catch (err: any) {
+            setError(`Scan Failed: ${err.message}. Please ensure the Edge Function is deployed.`);
+        } finally {
+            setIsScanning(false);
         }
     };
 
@@ -117,7 +136,7 @@ const SecurityDashboardPage: React.FC = () => {
                             High churn rate detected: <span className="font-bold text-red-600">{data.churn_rate}</span> of customers never return.
                         </p>
                         <p className="text-xs text-gray-500 flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md w-fit">
-                            <User className="w-3 h-3 opacity-50" /> {data.total_customers} total unique customers analyzed.
+                            <User className="w-3 h-3 opacity-50" /> {data.unique_customers || data.total_customers} unique customers analyzed.
                         </p>
                     </div>
                 );
@@ -153,14 +172,6 @@ const SecurityDashboardPage: React.FC = () => {
                         </p>
                         <p className="text-xs text-gray-500">
                             {data.cancelled} cancellations out of {data.total_orders} total attempts.
-                        </p>
-                    </div>
-                );
-            case 'voucher_abuse':
-                return (
-                    <div className="space-y-1">
-                        <p className="text-sm text-gray-700 leading-snug">
-                            Inadequate behavior: Multiple distinct accounts using same voucher pattern on shared hardware.
                         </p>
                     </div>
                 );
@@ -227,32 +238,159 @@ const SecurityDashboardPage: React.FC = () => {
         }
     };
 
+    // Filtering logic for the new tiered tab structure
+    const bypassAlerts = flags.filter(f => ['poached_customer', 'contact_leak', 'aov_crash', 'suspicious_cart_value'].includes(f.flag_type));
+    const behavioralAudit = flags.filter(f => ['multi_account', 'phantom_merchant', 'refund_predator', 'voucher_abuse', 'high_churn_chef'].includes(f.flag_type));
+
+    const renderAlertTable = (data: BypassFlag[], emptyMsg: string) => (
+        <section className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden animate-in fade-in duration-500">
+            <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                    <thead className="bg-gray-50/50 border-b border-gray-100">
+                        <tr>
+                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Detection Event</th>
+                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Entity under Review</th>
+                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Analysis Evidence</th>
+                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Status</th>
+                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em] text-right">Review Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {loading ? (
+                            <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400 font-medium">Scanning for threats...</td></tr>
+                        ) : data.length === 0 ? (
+                            <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400 font-medium italic">{emptyMsg}</td></tr>
+                        ) : data.map(flag => (
+                            <tr key={flag.id} className="group hover:bg-gray-50/50 transition-all duration-300">
+                                <td className="px-6 py-5 whitespace-nowrap">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-3 rounded-2xl shadow-sm ${
+                                            ['contact_leak', 'poached_customer', 'multi_account', 'refund_predator'].includes(flag.flag_type) 
+                                            ? 'bg-red-50 text-red-600' 
+                                            : 'bg-amber-50 text-amber-600'
+                                        }`}>
+                                            {getFlagIcon(flag.flag_type)}
+                                        </div>
+                                        <div>
+                                            <div className="text-sm font-black text-gray-900 uppercase tracking-tight leading-none mb-1">{flag.flag_type.replace(/_/g, ' ')}</div>
+                                            <div className="text-[11px] text-gray-400 font-bold flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {new Date(flag.created_at).toLocaleDateString()}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-5">
+                                    {flag.merchant_id === 'GLOBAL' ? (
+                                        <div className="flex items-center gap-3 bg-gray-100/50 p-2.5 rounded-2xl border border-gray-200/50">
+                                            <div className="p-2 bg-gray-200/50 text-gray-600 rounded-xl shadow-sm">
+                                                <Globe className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <div className="text-sm text-gray-950 font-extrabold leading-none mb-1">Global Audit</div>
+                                                <div className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Platform-wide Impact</div>
+                                            </div>
+                                        </div>
+                                    ) : flag.client ? (
+                                        <div className="flex items-center gap-3 bg-blue-50/50 p-2.5 rounded-2xl border border-blue-100/50">
+                                            <div className="p-2 bg-blue-100/50 text-blue-600 rounded-xl shadow-sm">
+                                                <User className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <div className="text-sm text-gray-900 font-extrabold leading-none mb-1">{flag.client.full_name}</div>
+                                                <div className="text-[10px] font-black uppercase text-blue-600/60 tracking-wider">Customer Target</div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-3 bg-purple-50/50 p-2.5 rounded-2xl border border-purple-100/50">
+                                            <div className="p-2 bg-purple-100/50 text-purple-600 rounded-xl shadow-sm">
+                                                <ChefHat className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <div className="text-sm text-gray-900 font-extrabold leading-none mb-1">{flag.chef?.name || 'Unknown Chef'}</div>
+                                                <div className="text-[10px] font-black uppercase text-purple-600/60 tracking-wider">Chef Practice Review</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="px-6 py-5 max-w-sm">
+                                    {formatEvidence(flag)}
+                                </td>
+                                <td className="px-6 py-5">
+                                    <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ${
+                                        flag.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                        flag.status === 'confirmed' ? 'bg-red-50 text-red-700 border-red-200' :
+                                        flag.status === 'false_positive' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                        'bg-green-50 text-green-700 border-green-200'
+                                    }`}>
+                                        {flag.status.replace('_', ' ')}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-5 text-right whitespace-nowrap">
+                                    <div className="flex items-center justify-end gap-3 translate-x-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                                        <button
+                                            onClick={() => handleStatusUpdate(flag.id, 'confirmed')}
+                                            className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all hover:scale-110 shadow-sm border border-red-100 active:scale-95"
+                                            title="Confirm Violation"
+                                        >
+                                            <CheckCircle className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleAddException(flag)}
+                                            className="p-3 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all hover:scale-110 shadow-sm border border-gray-100 active:scale-95"
+                                            title="Whitelist / Ignore"
+                                        >
+                                            <XCircle className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
+
     return (
         <div className="space-y-6">
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                 <div>
-                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">Advanced Security Engine</h1>
-                    <p className="text-gray-500 mt-0.5 text-sm font-medium">Detecting systemic anomalies and inadequate behavior patterns.</p>
+                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">Security Audit Engine</h1>
+                    <p className="text-gray-500 mt-0.5 text-sm font-medium">Platform-wide integrity and behavioral anomaly monitoring.</p>
                 </div>
-                <div className="flex gap-1.5 p-1.5 bg-gray-50 rounded-2xl border border-gray-100 self-start">
+                <div className="flex items-center gap-3">
                     <button
-                        onClick={() => setActiveTab('security')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'security' ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                        onClick={handleTriggerScan}
+                        disabled={isScanning}
+                        className={`flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 ${isScanning ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}`}
                     >
-                        Security Alerts
+                        {isScanning ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        {isScanning ? 'Scanning...' : 'Trigger Analysis'}
                     </button>
-                    <button
-                        onClick={() => setActiveTab('retention')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'retention' ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-                    >
-                        Churn Risk
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('exceptions')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'exceptions' ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-                    >
-                        Ignore List
-                    </button>
+                    <div className="flex gap-1.5 p-1.5 bg-gray-50 rounded-2xl border border-gray-100 self-start">
+                        <button
+                            onClick={() => setActiveTab('security')}
+                            className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'security' ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                        >
+                            Integrity
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('audit')}
+                            className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'audit' ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                        >
+                            Anomaly Audit
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('retention')}
+                            className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'retention' ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                        >
+                            Retention
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('exceptions')}
+                            className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'exceptions' ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                        >
+                            Whitelist
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -263,115 +401,18 @@ const SecurityDashboardPage: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'security' && (
-                <section className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden animate-in fade-in duration-500">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50/50 border-b border-gray-100">
-                                <tr>
-                                    <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Detection Event</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Entity under Review</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Behavior Analysis Evidence</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Status</th>
-                                    <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em] text-right">Review Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {loading ? (
-                                    <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400 font-medium">Scanning for threats...</td></tr>
-                                ) : flags.length === 0 ? (
-                                    <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400 font-medium italic">No security anomalies detected.</td></tr>
-                                ) : flags.map(flag => (
-                                    <tr key={flag.id} className="group hover:bg-gray-50/50 transition-all duration-300">
-                                        <td className="px-6 py-5 whitespace-nowrap">
-                                            <div className="flex items-center gap-4">
-                                                <div className={`p-3 rounded-2xl shadow-sm ${
-                                                    ['contact_leak', 'poached_customer', 'multi_account', 'refund_predator'].includes(flag.flag_type) 
-                                                    ? 'bg-red-50 text-red-600' 
-                                                    : 'bg-amber-50 text-amber-600'
-                                                }`}>
-                                                    {getFlagIcon(flag.flag_type)}
-                                                </div>
-                                                <div>
-                                                    <div className="text-sm font-black text-gray-900 uppercase tracking-tight leading-none mb-1">{flag.flag_type.replace(/_/g, ' ')}</div>
-                                                    <div className="text-[11px] text-gray-400 font-bold flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {new Date(flag.created_at).toLocaleDateString()}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            {flag.merchant_id === 'GLOBAL' ? (
-                                                <div className="flex items-center gap-3 bg-gray-100/50 p-2.5 rounded-2xl border border-gray-200/50">
-                                                    <div className="p-2 bg-gray-200/50 text-gray-600 rounded-xl shadow-sm">
-                                                        <Globe className="w-4 h-4" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm text-gray-950 font-extrabold leading-none mb-1">Global Audit</div>
-                                                        <div className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Platform-wide Impact</div>
-                                                    </div>
-                                                </div>
-                                            ) : flag.client ? (
-                                                <div className="flex items-center gap-3 bg-blue-50/50 p-2.5 rounded-2xl border border-blue-100/50">
-                                                    <div className="p-2 bg-blue-100/50 text-blue-600 rounded-xl shadow-sm">
-                                                        <User className="w-4 h-4" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm text-gray-900 font-extrabold leading-none mb-1">{flag.client.full_name}</div>
-                                                        <div className="text-[10px] font-black uppercase text-blue-600/60 tracking-wider">Customer Target</div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-3 bg-purple-50/50 p-2.5 rounded-2xl border border-purple-100/50">
-                                                    <div className="p-2 bg-purple-100/50 text-purple-600 rounded-xl shadow-sm">
-                                                        <ChefHat className="w-4 h-4" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm text-gray-900 font-extrabold leading-none mb-1">{flag.chef?.name || 'Unknown Chef'}</div>
-                                                        <div className="text-[10px] font-black uppercase text-purple-600/60 tracking-wider">Chef Practice Review</div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-5 max-w-sm">
-                                            {formatEvidence(flag)}
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ${
-                                                flag.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                                flag.status === 'confirmed' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                flag.status === 'false_positive' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                                'bg-green-50 text-green-700 border-green-200'
-                                            }`}>
-                                                {flag.status.replace('_', ' ')}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 text-right whitespace-nowrap">
-                                            <div className="flex items-center justify-end gap-3 translate-x-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                                                <button
-                                                    onClick={() => handleStatusUpdate(flag.id, 'confirmed')}
-                                                    className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all hover:scale-110 shadow-sm border border-red-100 active:scale-95"
-                                                    title="Confirm Violation"
-                                                >
-                                                    <CheckCircle className="w-5 h-5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleAddException(flag)}
-                                                    className="p-3 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all hover:scale-110 shadow-sm border border-gray-100 active:scale-95"
-                                                    title="Whitelist / Ignore"
-                                                >
-                                                    <XCircle className="w-5 h-5" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            )}
+            {activeTab === 'security' && renderAlertTable(bypassAlerts, "No platform integrity violations detected.")}
+            
+            {activeTab === 'audit' && renderAlertTable(behavioralAudit, "Deep behavioral audit complete. No suspicious clusters found.")}
 
             {activeTab === 'retention' && (
                 <section className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden animate-in fade-in duration-500">
+                    <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-gray-400">
+                            <Activity className="w-4 h-4" />
+                            <span className="text-[11px] font-black uppercase tracking-widest">Churn Risk Analysis</span>
+                        </div>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="bg-gray-50/50 border-b border-gray-100">
@@ -407,7 +448,7 @@ const SecurityDashboardPage: React.FC = () => {
                                                 <span className="text-sm text-gray-950 font-black">{item.p_days_since_last} days inactive</span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-5 whitespace-nowrap text-xs text-gray-500 font-bold flex items-center gap-2 mt-2">
+                                        <td className="px-6 py-5 whitespace-nowrap text-xs text-gray-500 font-bold flex items-center gap-2">
                                             <Calendar className="w-4 h-4 opacity-40" />
                                             {new Date(item.p_last_order_date).toLocaleDateString()}
                                         </td>
@@ -415,7 +456,7 @@ const SecurityDashboardPage: React.FC = () => {
                                             <button
                                                 className="px-6 py-2.5 bg-gray-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg hover:shadow-blue-500/25 active:scale-95"
                                             >
-                                                Trigger Nudge
+                                                Send Nudge
                                             </button>
                                         </td>
                                     </tr>

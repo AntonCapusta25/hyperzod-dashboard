@@ -108,6 +108,36 @@ export async function addSecurityException(exception: Partial<SecurityException>
 }
 
 /**
+ * Manually trigger the behavioral analysis edge function
+ */
+export async function triggerAnalysis(): Promise<{ success: boolean; count?: number }> {
+    // Note: This requires the Edge Function to be deployed and accessible.
+    // In a production environment, this would ideally be called with the Service Role key,
+    // but for the dashboard trigger, we rely on the backend triggering or administrative JWT.
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+        throw new Error('You must be authenticated to trigger an analysis.');
+    }
+
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-bypass-behavior`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({})
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to trigger behavioral analysis.');
+    }
+
+    return await response.json();
+}
+
+/**
  * Remove a security exception
  */
 export async function removeSecurityException(id: string): Promise<void> {
