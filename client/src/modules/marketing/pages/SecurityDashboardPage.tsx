@@ -19,7 +19,6 @@ import {
     Activity,
     Globe,
     Zap,
-    Search,
     RefreshCw
 } from 'lucide-react';
 import {
