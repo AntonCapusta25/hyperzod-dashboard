@@ -210,7 +210,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Detect Contact Leaks
-CREATE OR REPLACE REPLACE FUNCTION detect_contact_leaks()
+CREATE OR REPLACE FUNCTION detect_contact_leaks()
 RETURNS TABLE (
     p_user_id integer,
     p_merchant_id text,
