@@ -21,8 +21,7 @@ import {
     Zap,
     RefreshCw,
     ChevronDown,
-    ChevronRight,
-    Search
+    ChevronRight
 } from 'lucide-react';
 import {
     fetchBypassFlags,
