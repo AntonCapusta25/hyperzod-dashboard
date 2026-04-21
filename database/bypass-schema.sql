@@ -1,5 +1,5 @@
 -- =====================================================
--- BYPASS DETECTION SYSTEM - DATABASE SCHEMA (RESILLIENT V4 - ORCHESTRATION)
+-- BYPASS DETECTION SYSTEM - DATABASE SCHEMA (RESILLIENT V6 - ADEQUATE THRESHOLDS)
 -- =====================================================
 
 -- 1. Bypass Flags Table
@@ -118,7 +118,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Detect Poached Customers
+-- Detect Poached Customers (Threshold: 4 orders)
 CREATE OR REPLACE FUNCTION detect_poached_customers()
 RETURNS TABLE (
     p_user_id integer,
@@ -156,9 +156,10 @@ BEGIN
     FROM pairs p 
     JOIN overall o ON p.user_id = o.user_id
     LEFT JOIN public.merchants m ON (p.merchant_id = m.hyperzod_merchant_id OR p.merchant_id = m.merchant_id)
-    WHERE p.p_orders >= 3 
+    WHERE p.p_orders >= 4 
       AND p.p_last_order < (now() - INTERVAL '1 day')
-      AND o.o_last_order > (p.p_last_order + INTERVAL '10 days');
+      AND o.o_last_order > (p.p_last_order + INTERVAL '10 days')
+      AND EXISTS (SELECT 1 FROM public.clients c WHERE c.hyperzod_id = p.user_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -231,7 +232,8 @@ BEGIN
     FROM public.orders o
     LEFT JOIN public.merchants m ON (o.merchant_id = m.hyperzod_merchant_id OR o.merchant_id = m.merchant_id)
     WHERE o.order_note ~* '(\+?[0-9]{10,13}|WhatsApp|PayPal|Zelle|Venmo|@)'
-      AND o.created_at > (now() - INTERVAL '1 day');
+      AND o.created_at > (now() - INTERVAL '1 day')
+      AND EXISTS (SELECT 1 FROM public.clients c WHERE c.hyperzod_id = o.user_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -244,12 +246,13 @@ DROP FUNCTION IF EXISTS detect_multi_account();
 DROP FUNCTION IF EXISTS detect_phantom_merchants();
 DROP FUNCTION IF EXISTS detect_refund_predators();
 
--- Detect Multi-Accounting (IP/Device Reuse)
+-- Detect Multi-Accounting (Enhanced with Name Resolution)
 CREATE OR REPLACE FUNCTION detect_multi_account()
 RETURNS TABLE (
     p_ip text,
     p_device text,
     user_ids integer[],
+    user_names text,
     order_count bigint,
     last_event timestamp with time zone
 ) AS $$
@@ -259,16 +262,18 @@ BEGIN
         o.ip,
         o.device,
         array_agg(DISTINCT o.user_id) as u_ids,
+        string_agg(DISTINCT c.full_name, ' & ') as u_names,
         COUNT(*) as o_count,
         MAX(to_timestamp(o.created_timestamp)) as l_event
     FROM public.orders o
+    JOIN public.clients c ON o.user_id = c.hyperzod_id
     WHERE o.ip IS NOT NULL AND o.user_id IS NOT NULL
     GROUP BY o.ip, o.device
     HAVING COUNT(DISTINCT o.user_id) >= 2;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Detect Phantom Merchants (Revenue Concentration)
+-- Detect Phantom Merchants (Threshold: 70%)
 CREATE OR REPLACE FUNCTION detect_phantom_merchants()
 RETURNS TABLE (
     p_merchant_id text,
@@ -309,12 +314,12 @@ BEGIN
     LEFT JOIN public.merchants m ON (ms.merchant_id = m.hyperzod_merchant_id OR ms.merchant_id = m.merchant_id)
     WHERE tc.rank = 1 
       AND ms.c_count >= 1
-      AND (tc.customer_amt / ms.total_amt) >= 0.80 -- 80% revenue from one customer
-      AND ms.total_amt > 50; -- Minimum threshold to avoid noise
+      AND (tc.customer_amt / ms.total_amt) >= 0.70 -- Reduced to 70%
+      AND ms.total_amt > 50; 
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Detect Refund Predators (High Cancellation Rate)
+-- Detect Refund Predators (Threshold: 40% & 5 orders)
 CREATE OR REPLACE FUNCTION detect_refund_predators()
 RETURNS TABLE (
     p_user_id integer,
@@ -332,7 +337,8 @@ BEGIN
     FROM public.orders o
     WHERE o.user_id IS NOT NULL
     GROUP BY o.user_id
-    HAVING COUNT(*) >= 3 AND (SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END)::numeric / COUNT(*)::numeric) >= 0.50;
+    HAVING COUNT(*) >= 5 AND (SUM(CASE WHEN o.order_status IN (4, 6) THEN 1 ELSE 0 END)::numeric / COUNT(*)::numeric) >= 0.40
+    AND EXISTS (SELECT 1 FROM public.clients c WHERE c.hyperzod_id = o.user_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -351,32 +357,44 @@ DECLARE
 BEGIN
     -- 1. Poached Customers
     FOR r IN SELECT * FROM detect_poached_customers() LOOP
-        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
-        VALUES ('poached_customer', r.p_user_id, r.p_merchant_id, 
-               jsonb_build_object('total_orders', r.pair_orders, 'days_since_chef', r.days_since_merchant, 'days_since_platform', r.days_since_platform))
-        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
-        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
-        v_count := v_count + 1;
+        IF EXISTS (SELECT 1 FROM public.clients WHERE hyperzod_id = r.p_user_id) THEN
+            INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+            VALUES ('poached_customer', r.p_user_id, r.p_merchant_id, 
+                   jsonb_build_object('total_orders', r.pair_orders, 'days_since_chef', r.days_since_merchant, 'days_since_platform', r.days_since_platform))
+            ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+            DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+            v_count := v_count + 1;
+        END IF;
     END LOOP;
 
     -- 2. Contact Leaks
     FOR r IN SELECT * FROM detect_contact_leaks() LOOP
-        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
-        VALUES ('contact_leak', r.p_user_id, r.p_merchant_id, 
-               jsonb_build_object('note', r.leaked_note, 'order_id', r.p_order_id))
-        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
-        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
-        v_count := v_count + 1;
+        IF EXISTS (SELECT 1 FROM public.clients WHERE hyperzod_id = r.p_user_id) THEN
+            INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+            VALUES ('contact_leak', r.p_user_id, r.p_merchant_id, 
+                   jsonb_build_object('note', r.leaked_note, 'order_id', r.p_order_id))
+            ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+            DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+            v_count := v_count + 1;
+        END IF;
     END LOOP;
 
-    -- 3. Multi-Account
+    -- 3. Multi-Account (Hardened: includes names list)
     FOR r IN SELECT * FROM detect_multi_account() LOOP
-        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
-        VALUES ('multi_account', r.user_ids[1], 'GLOBAL', 
-               jsonb_build_object('shared_ip', r.p_ip, 'shared_device', r.p_device, 'linked_accounts', array_length(r.user_ids, 1), 'total_orders', r.order_count))
-        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
-        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
-        v_count := v_count + 1;
+        IF EXISTS (SELECT 1 FROM public.clients WHERE hyperzod_id = r.user_ids[1]) THEN
+            INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+            VALUES ('multi_account', r.user_ids[1], 'GLOBAL', 
+                   jsonb_build_object(
+                     'shared_ip', r.p_ip, 
+                     'shared_device', r.p_device, 
+                     'linked_accounts', array_length(r.user_ids, 1), 
+                     'linked_names', r.user_names,
+                     'total_orders', r.order_count
+                   ))
+            ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+            DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+            v_count := v_count + 1;
+        END IF;
     END LOOP;
 
     -- 4. Phantom Merchant
@@ -391,12 +409,14 @@ BEGIN
 
     -- 5. Refund Predators
     FOR r IN SELECT * FROM detect_refund_predators() LOOP
-        INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
-        VALUES ('refund_predator', r.p_user_id, 'GLOBAL', 
-               jsonb_build_object('total_orders', r.total_orders, 'cancelled', r.cancelled_orders, 'refund_rate', r.refund_rate))
-        ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
-        DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
-        v_count := v_count + 1;
+        IF EXISTS (SELECT 1 FROM public.clients WHERE hyperzod_id = r.p_user_id) THEN
+            INSERT INTO bypass_flags (flag_type, user_id, merchant_id, evidence_data)
+            VALUES ('refund_predator', r.p_user_id, 'GLOBAL', 
+                   jsonb_build_object('total_orders', r.total_orders, 'cancelled', r.cancelled_orders, 'refund_rate', r.refund_rate))
+            ON CONFLICT (flag_type, merchant_id, COALESCE(user_id, -1)) 
+            DO UPDATE SET evidence_data = EXCLUDED.evidence_data, updated_at = now();
+            v_count := v_count + 1;
+        END IF;
     END LOOP;
 
     RETURN json_build_object('success', true, 'count', v_count);

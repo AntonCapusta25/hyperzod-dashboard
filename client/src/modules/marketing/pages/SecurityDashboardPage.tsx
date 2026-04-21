@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     ShieldAlert,
     CheckCircle,
@@ -19,7 +19,10 @@ import {
     Activity,
     Globe,
     Zap,
-    RefreshCw
+    RefreshCw,
+    ChevronDown,
+    ChevronRight,
+    Search
 } from 'lucide-react';
 import {
     fetchBypassFlags,
@@ -45,6 +48,7 @@ const SecurityDashboardPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isScanning, setIsScanning] = useState(false);
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         loadData();
@@ -57,6 +61,13 @@ const SecurityDashboardPage: React.FC = () => {
             if (activeTab === 'security' || activeTab === 'audit') {
                 const data = await fetchBypassFlags();
                 setFlags(data);
+                
+                // Initialize all groups as expanded by default or collapsed?
+                // User said "so i dont see the huge list straight away", so let's default to collapsed.
+                const initialExpanded: Record<string, boolean> = {};
+                const uniqueTypes = [...new Set(data.map(f => f.flag_type))];
+                uniqueTypes.forEach(t => initialExpanded[t] = false);
+                setExpandedGroups(initialExpanded);
             } else if (activeTab === 'retention') {
                 const data = await fetchAtRiskCustomers(30);
                 setAtRisk(data);
@@ -71,6 +82,10 @@ const SecurityDashboardPage: React.FC = () => {
         }
     };
 
+    const toggleGroup = (type: string) => {
+        setExpandedGroups(prev => ({ ...prev, [type]: !prev[type] }));
+    };
+
     const handleTriggerScan = async () => {
         setIsScanning(true);
         setError(null);
@@ -79,7 +94,7 @@ const SecurityDashboardPage: React.FC = () => {
             alert(`Analysis complete! Identified ${result.count} anomalies.`);
             loadData();
         } catch (err: any) {
-            setError(`Scan Failed: ${err.message}. Please ensure the Edge Function is deployed.`);
+            setError(`Scan Failed: ${err.message}. Please ensure you have run the updated V6 SQL in your Supabase editor.`);
         } finally {
             setIsScanning(false);
         }
@@ -121,7 +136,7 @@ const SecurityDashboardPage: React.FC = () => {
                         </p>
                         <div className="flex items-center gap-3 text-xs text-gray-500 bg-red-50 p-1.5 rounded-lg border border-red-100 w-fit">
                             <span className="flex items-center gap-1 font-bold text-red-600">
-                                <TrendingDown className="w-3 h-3" /> {data.drop_percentage}% drop
+                                <TrendingDown className="w-3 h-3" /> {data.drop_percentage || data.drop}% drop
                             </span>
                             <span className="opacity-60">Avg: PKR {Math.round(data.previous_avg).toLocaleString()}</span>
                             <span className="opacity-60">Last: PKR {Math.round(data.last_spent).toLocaleString()}</span>
@@ -142,13 +157,13 @@ const SecurityDashboardPage: React.FC = () => {
             case 'multi_account':
                 return (
                     <div className="space-y-1">
-                        <p className="text-sm text-gray-700 leading-snug font-semibold text-red-700">
-                            🚨 High Suspicion: IP/Device Reuse detected.
+                        <p className="text-sm font-bold text-red-700 flex items-center gap-2">
+                             Linked Accounts: <span className="font-black border-b-2 border-red-200">{data.linked_names || 'Multiple Profiles'}</span>
                         </p>
                         <div className="text-[11px] grid grid-cols-2 gap-x-4 gap-y-1 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                            <div><span className="text-gray-400 font-medium">IP:</span> {data.shared_ip}</div>
-                            <div><span className="text-gray-400 font-medium">Linked IDs:</span> {data.linked_accounts}</div>
-                            <div className="col-span-2 truncate"><span className="text-gray-400 font-medium">Device:</span> {data.shared_device}</div>
+                            <div><span className="text-gray-400 font-medium">Shared IP:</span> {data.shared_ip}</div>
+                            <div><span className="text-gray-400 font-medium">Cluster Size:</span> {data.linked_accounts}</div>
+                            <div className="col-span-2 truncate"><span className="text-gray-400 font-medium">Primary Device:</span> {data.shared_device}</div>
                         </div>
                     </div>
                 );
@@ -156,10 +171,10 @@ const SecurityDashboardPage: React.FC = () => {
                 return (
                     <div className="space-y-1">
                         <p className="text-sm text-gray-700 leading-snug">
-                            Inadequate behavior: <span className="font-bold text-purple-700">{data.concentration}</span> of revenue from a single customer.
+                            Inadequate behavior: <span className="font-bold text-purple-700">{data.concentration}%</span> revenue from one customer.
                         </p>
                         <p className="text-xs text-gray-500 flex items-center gap-1.5 bg-purple-50 px-2 py-1 rounded-md w-fit">
-                            <Activity className="w-3 h-3 text-purple-600" /> Revenue concentration: PKR {Math.round(data.total_revenue).toLocaleString()}
+                            <Activity className="w-3 h-3 text-purple-600" /> Revenue volume: PKR {Math.round(data.total_revenue).toLocaleString()}
                         </p>
                     </div>
                 );
@@ -167,10 +182,10 @@ const SecurityDashboardPage: React.FC = () => {
                 return (
                     <div className="space-y-1">
                         <p className="text-sm text-gray-700 leading-snug font-bold text-red-600">
-                            Excessive Refund Abuse: <span className="border-b-2 border-red-200">{data.refund_rate}</span> rate.
+                            Abuse Pattern: <span className="border-b-2 border-red-200">{data.refund_rate}%</span> cancellation rate.
                         </p>
                         <p className="text-xs text-gray-500">
-                            {data.cancelled} cancellations out of {data.total_orders} total attempts.
+                            {data.cancelled} cancellations out of {data.total_orders} order attempts.
                         </p>
                     </div>
                 );
@@ -237,116 +252,159 @@ const SecurityDashboardPage: React.FC = () => {
         }
     };
 
-    // Filtering logic for the new tiered tab structure
-    const bypassAlerts = flags.filter(f => ['poached_customer', 'contact_leak', 'aov_crash', 'suspicious_cart_value'].includes(f.flag_type));
-    const behavioralAudit = flags.filter(f => ['multi_account', 'phantom_merchant', 'refund_predator', 'voucher_abuse', 'high_churn_chef'].includes(f.flag_type));
+    const getFlagTypeLabel = (type: string) => {
+        return type.replace(/_/g, ' ').toUpperCase();
+    };
 
-    const renderAlertTable = (data: BypassFlag[], emptyMsg: string) => (
-        <section className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden animate-in fade-in duration-500">
-            <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50/50 border-b border-gray-100">
-                        <tr>
-                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Detection Event</th>
-                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Entity under Review</th>
-                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Analysis Evidence</th>
-                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em]">Status</th>
-                            <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.1em] text-right">Review Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                        {loading ? (
-                            <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400 font-medium">Scanning for threats...</td></tr>
-                        ) : data.length === 0 ? (
-                            <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400 font-medium italic">{emptyMsg}</td></tr>
-                        ) : data.map(flag => (
-                            <tr key={flag.id} className="group hover:bg-gray-50/50 transition-all duration-300">
-                                <td className="px-6 py-5 whitespace-nowrap">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`p-3 rounded-2xl shadow-sm ${
-                                            ['contact_leak', 'poached_customer', 'multi_account', 'refund_predator'].includes(flag.flag_type) 
-                                            ? 'bg-red-50 text-red-600' 
-                                            : 'bg-amber-50 text-amber-600'
-                                        }`}>
-                                            {getFlagIcon(flag.flag_type)}
-                                        </div>
-                                        <div>
-                                            <div className="text-sm font-black text-gray-900 uppercase tracking-tight leading-none mb-1">{flag.flag_type.replace(/_/g, ' ')}</div>
-                                            <div className="text-[11px] text-gray-400 font-bold flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {new Date(flag.created_at).toLocaleDateString()}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-5">
-                                    {flag.merchant_id === 'GLOBAL' ? (
-                                        <div className="flex items-center gap-3 bg-gray-100/50 p-2.5 rounded-2xl border border-gray-200/50">
-                                            <div className="p-2 bg-gray-200/50 text-gray-600 rounded-xl shadow-sm">
-                                                <Globe className="w-4 h-4" />
-                                            </div>
-                                            <div>
-                                                <div className="text-sm text-gray-950 font-extrabold leading-none mb-1">Global Audit</div>
-                                                <div className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Platform-wide Impact</div>
-                                            </div>
-                                        </div>
-                                    ) : flag.client ? (
-                                        <div className="flex items-center gap-3 bg-blue-50/50 p-2.5 rounded-2xl border border-blue-100/50">
-                                            <div className="p-2 bg-blue-100/50 text-blue-600 rounded-xl shadow-sm">
-                                                <User className="w-4 h-4" />
-                                            </div>
-                                            <div>
-                                                <div className="text-sm text-gray-900 font-extrabold leading-none mb-1">{flag.client.full_name}</div>
-                                                <div className="text-[10px] font-black uppercase text-blue-600/60 tracking-wider">Customer Target</div>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-3 bg-purple-50/50 p-2.5 rounded-2xl border border-purple-100/50">
-                                            <div className="p-2 bg-purple-100/50 text-purple-600 rounded-xl shadow-sm">
-                                                <ChefHat className="w-4 h-4" />
-                                            </div>
-                                            <div>
-                                                <div className="text-sm text-gray-900 font-extrabold leading-none mb-1">{flag.chef?.name || 'Unknown Chef'}</div>
-                                                <div className="text-[10px] font-black uppercase text-purple-600/60 tracking-wider">Chef Practice Review</div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="px-6 py-5 max-w-sm">
-                                    {formatEvidence(flag)}
-                                </td>
-                                <td className="px-6 py-5">
-                                    <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ${
-                                        flag.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                        flag.status === 'confirmed' ? 'bg-red-50 text-red-700 border-red-200' :
-                                        flag.status === 'false_positive' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                        'bg-green-50 text-green-700 border-green-200'
-                                    }`}>
-                                        {flag.status.replace('_', ' ')}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-5 text-right whitespace-nowrap">
-                                    <div className="flex items-center justify-end gap-3 translate-x-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                                        <button
-                                            onClick={() => handleStatusUpdate(flag.id, 'confirmed')}
-                                            className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all hover:scale-110 shadow-sm border border-red-100 active:scale-95"
-                                            title="Confirm Violation"
-                                        >
-                                            <CheckCircle className="w-5 h-5" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleAddException(flag)}
-                                            className="p-3 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all hover:scale-110 shadow-sm border border-gray-100 active:scale-95"
-                                            title="Whitelist / Ignore"
-                                        >
-                                            <XCircle className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+    const getFlagTypeDescription = (type: string) => {
+        switch (type) {
+            case 'multi_account': return "Potential multi-device account clusters using same network credentials.";
+            case 'phantom_merchant': return "High revenue concentration from a single customer (Potential self-ordering).";
+            case 'refund_predator': return "Excessive order cancellations or refund requests compared to average.";
+            case 'poached_customer': return "Loyal customers who stopped ordering from a specific chef but remain on platform.";
+            case 'contact_leak': return "Phone numbers or social handles detected in order communications.";
+            case 'aov_crash': return "Sudden drop in average order value for a previously high-value pairing.";
+            default: return "Analyzed behavioral anomalies requiring review.";
+        }
+    }
+
+    const filteredAndGroupedFlags = useMemo(() => {
+        const sourceData = activeTab === 'security' 
+            ? flags.filter(f => ['poached_customer', 'contact_leak', 'aov_crash', 'suspicious_cart_value'].includes(f.flag_type))
+            : activeTab === 'audit' 
+                ? flags.filter(f => ['multi_account', 'phantom_merchant', 'refund_predator', 'voucher_abuse', 'high_churn_chef'].includes(f.flag_type))
+                : [];
+        
+        // Group by type
+        const groups: Record<string, BypassFlag[]> = {};
+        sourceData.forEach(f => {
+            if (!groups[f.flag_type]) groups[f.flag_type] = [];
+            groups[f.flag_type].push(f);
+        });
+        
+        return groups;
+    }, [flags, activeTab]);
+
+    const renderGroupHeading = (type: string, count: number) => (
+        <button 
+            onClick={() => toggleGroup(type)}
+            className="w-full flex items-center justify-between px-6 py-4 bg-gray-50/50 hover:bg-gray-100/50 transition-colors border-b border-gray-100 group"
+        >
+            <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-xl shadow-sm ${expandedGroups[type] ? 'bg-blue-600 text-white' : 'bg-white text-gray-400 group-hover:text-blue-600 border border-gray-100'}`}>
+                    {getFlagIcon(type)}
+                </div>
+                <div className="text-left">
+                    <h3 className="text-sm font-black text-gray-900 tracking-tight flex items-center gap-2">
+                        {getFlagTypeLabel(type)}
+                        <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded-lg text-[10px] font-black">{count}</span>
+                    </h3>
+                    <p className="text-[11px] text-gray-500 font-medium">{getFlagTypeDescription(type)}</p>
+                </div>
             </div>
-        </section>
+            <div className="text-gray-300 group-hover:text-gray-600 transition-colors">
+                {expandedGroups[type] ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+            </div>
+        </button>
     );
+
+    const renderCollapsibleTable = (groups: Record<string, BypassFlag[]>, emptyMsg: string) => {
+        const types = Object.keys(groups);
+        
+        if (loading) {
+            return (
+                <div className="bg-white rounded-3xl p-16 text-center text-gray-400 font-medium shadow-xl border border-gray-100">
+                    Scanning behavioral patterns...
+                </div>
+            );
+        }
+
+        if (types.length === 0) {
+            return (
+                <div className="bg-white rounded-3xl p-16 text-center text-gray-400 font-medium italic shadow-xl border border-gray-100">
+                    {emptyMsg}
+                </div>
+            );
+        }
+
+        return (
+            <div className="space-y-4">
+                {types.map(type => (
+                    <section key={type} className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        {renderGroupHeading(type, groups[type].length)}
+                        
+                        {expandedGroups[type] && (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-50/10 border-b border-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                        <tr>
+                                            <th className="px-6 py-4">Detection Time</th>
+                                            <th className="px-6 py-4">Subject Profile</th>
+                                            <th className="px-6 py-4">Analysis Evidence</th>
+                                            <th className="px-6 py-4">Status</th>
+                                            <th className="px-6 py-4 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {groups[type].map(flag => (
+                                            <tr key={flag.id} className="group hover:bg-gray-50/50 transition-all duration-300">
+                                                <td className="px-6 py-5 whitespace-nowrap">
+                                                    <div className="text-[11px] text-gray-500 font-bold flex items-center gap-1.5">
+                                                        <Calendar className="w-3.5 h-3.5 opacity-40" /> 
+                                                        {new Date(flag.created_at).toLocaleDateString()}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    {flag.merchant_id === 'GLOBAL' ? (
+                                                        <div className="flex items-center gap-2 text-gray-900 font-black text-sm"><Globe className="w-4 h-4 text-gray-400" /> Platform-wide</div>
+                                                    ) : flag.client ? (
+                                                        <div className="flex items-center gap-2 text-gray-900 font-black text-sm"><User className="w-4 h-4 text-blue-500" /> {flag.client.full_name}</div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 text-gray-900 font-black text-sm"><ChefHat className="w-4 h-4 text-purple-500" /> {flag.chef?.name || 'Unknown'}</div>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-5 max-w-sm">
+                                                    {formatEvidence(flag)}
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
+                                                        flag.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                                        flag.status === 'confirmed' ? 'bg-red-50 text-red-700 border-red-100' :
+                                                        flag.status === 'false_positive' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                        'bg-green-50 text-green-700 border-green-100'
+                                                    }`}>
+                                                        {flag.status.replace('_', ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-5 text-right whitespace-nowrap">
+                                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => handleStatusUpdate(flag.id, 'confirmed')}
+                                                            className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all border border-red-50"
+                                                            title="Confirm & Flag"
+                                                        >
+                                                            <CheckCircle className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleAddException(flag)}
+                                                            className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl transition-all border border-gray-100"
+                                                            title="Whitelist"
+                                                        >
+                                                            <XCircle className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </section>
+                ))}
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -400,9 +458,9 @@ const SecurityDashboardPage: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'security' && renderAlertTable(bypassAlerts, "No platform integrity violations detected.")}
-            
-            {activeTab === 'audit' && renderAlertTable(behavioralAudit, "Deep behavioral audit complete. No suspicious clusters found.")}
+            {(activeTab === 'security' || activeTab === 'audit') && 
+                renderCollapsibleTable(filteredAndGroupedFlags, "No suspicious behavioral clusters identified in this category.")
+            }
 
             {activeTab === 'retention' && (
                 <section className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden animate-in fade-in duration-500">
